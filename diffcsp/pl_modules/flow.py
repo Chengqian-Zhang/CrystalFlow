@@ -25,6 +25,7 @@ from torch_geometric.utils import dense_to_sparse, to_dense_adj
 from torch_scatter import scatter
 from torch_scatter.composite import scatter_softmax
 from tqdm import tqdm
+from IPython import embed
 
 import hydra
 from diffcsp.common.data_utils import (

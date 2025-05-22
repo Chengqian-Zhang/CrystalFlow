@@ -20,6 +20,7 @@ from pymatgen.core.structure import Structure
 from pyxtal import pyxtal
 from scipy.stats import wasserstein_distance
 from tqdm import tqdm
+from IPython import embed
 # from joblib import Parallel, delayed
 
 sys.path.append('.')

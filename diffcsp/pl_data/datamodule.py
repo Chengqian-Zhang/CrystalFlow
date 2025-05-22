@@ -10,6 +10,7 @@ import torch
 from omegaconf import DictConfig
 from torch.utils.data import Dataset
 from torch_geometric.loader import DataLoader
+from IPython import embed
 
 from diffcsp.common.utils import PROJECT_ROOT
 from diffcsp.common.data_utils import get_scaler_from_data_list

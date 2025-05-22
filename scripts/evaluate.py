@@ -20,6 +20,7 @@ from pyxtal.symmetry import Group
 import copy
 
 import numpy as np
+from IPython import embed
 
 
 def diffusion(loader, model, num_evals, **sample_kwargs):
