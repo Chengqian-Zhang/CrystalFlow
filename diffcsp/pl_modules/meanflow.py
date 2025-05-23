@@ -304,9 +304,9 @@ class CSPFlow(BaseModule):
         else:
             pred_l, pred_f = pred
 
-        batch.num_atoms = batch.num_atoms.detach().long()
         pred_l_tgt = tar_l - (times[:,None] - start_times[:,None]) * dudt[0]
         pred_f_tgt = tar_f - (times[:,None].repeat_interleave(batch.num_atoms, dim=0) - start_times[:,None].repeat_interleave(batch.num_atoms, dim=0)) * dudt[1]
+        pred_f_tgt = (pred_f_tgt-0.5) % 1 - 0.5
 
         pred_l_tgt_stopgrad = pred_l_tgt.detach()
         pred_f_tgt_stopgrad = pred_f_tgt.detach()
