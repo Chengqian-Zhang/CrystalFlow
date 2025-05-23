@@ -163,16 +163,13 @@ class CSPFlow(BaseModule):
             l0[:, :5] = 0
         return l0
     
-    def build_tangents(self, input_lattice_rep, input_frac_coords, input_atom_types, start_times, times, num_atoms, batch, v_l, v_f):
+    def build_tangents(self, input_lattice_rep, input_frac_coords, start_times, times, v_l, v_f):
         if self.pred_type:
             raise RuntimeError('Not implemented')
         else:
-            v_a = torch.zeros_like(input_atom_types)
             v_r = torch.zeros_like(start_times)
             v_t = torch.ones_like(times)
-            v_num_atoms = torch.zeros_like(num_atoms)
-            v_batch = torch.zeros_like(batch)
-            return (v_l, v_f, v_a, v_r, v_t, v_num_atoms, v_batch)
+            return (v_l, v_f, v_r, v_t)
 
 
     def forward(self, batch, guide_threshold=None):
@@ -277,18 +274,12 @@ class CSPFlow(BaseModule):
             tar_l = torch.zeros_like(lattices_rep_T)
 
         # Flow
-        input_atom_types = input_atom_types.to(torch.float32)
-        batch.num_atoms = batch.num_atoms.to(torch.float32)
-        batch.batch = batch.batch.to(torch.float32)
 
         tangents_tuple = self.build_tangents(
             input_lattice_rep,
             input_frac_coords,
-            input_atom_types, #float32
             start_times,
             times,
-            batch.num_atoms, #float32
-            batch.batch, #float32
             v_l=tar_l,
             v_f=tar_f,
         )
@@ -298,13 +289,14 @@ class CSPFlow(BaseModule):
             (
             input_lattice_rep,
             input_frac_coords,
-            input_atom_types,
             start_times,
             times,
+            input_atom_types,
             batch.num_atoms,
             batch.batch,
             ),
             tangents=tangents_tuple,
+            argnums=(0,1,2,3),
         )
 
         if self.pred_type:

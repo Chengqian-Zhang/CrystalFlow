@@ -494,17 +494,7 @@ class CSPNet(nn.Module):
             raise ValueError(f"Unknown type of edge style: {self.edge_style}")
 
     #def forward(self, t, atom_types, frac_coords, lattices_rep, num_atoms, node2graph, lattices_mat=None, cemb=None, guide_indicator=None):
-    def forward(self, lattices_rep, frac_coords, atom_types, r, t, num_atoms, node2graph):
-
-        if self.smooth:
-            raise RuntimeError("Smooth mode is not supported for CSPNet")
-        else:
-            atom_types = atom_types.detach().long()
-            num_atoms = num_atoms.detach().long()
-            node2graph = node2graph.detach().long()
-            assert not atom_types.requires_grad
-            assert not num_atoms.requires_grad
-            assert not node2graph.requires_grad
+    def forward(self, lattices_rep, frac_coords, r, t, atom_types, num_atoms, node2graph):
 
         if self.lattice_polar:
             lattices_mat = lattice_polar_build_torch(lattices_rep)
