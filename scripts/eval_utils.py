@@ -19,7 +19,7 @@ sys.path.append('.')
 from diffcsp.common.constants import CompScalerMeans, CompScalerStds
 from diffcsp.common.data_utils import StandardScaler, chemical_symbols
 from diffcsp.pl_data.dataset import TensorCrystDataset
-from diffcsp.pl_data.datamodule import worker_init_fnxwxw
+from diffcsp.pl_data.datamodule import worker_init_fn
 
 
 CompScaler = StandardScaler(
