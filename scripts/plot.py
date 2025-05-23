@@ -30,7 +30,7 @@ def parse_logs(log_text):
     return metrics
 
 # 绘制损失曲线
-def plot_losses(metrics):
+def plot_losses(metrics, run_path):
     plt.figure(figsize=(12, 8))
     
     # 训练与验证损失对比
@@ -60,7 +60,7 @@ def plot_losses(metrics):
     '''
     
     plt.tight_layout()
-    plt.savefig('training_metrics.png', dpi=300)
+    plt.savefig(f'{run_path}/training_metrics.png', dpi=300)
 
 # 辅助绘图函数
 def plot_metric(metrics, key, label, **style):
@@ -78,4 +78,4 @@ log_file = os.path.join(run_path, "run.metrics.log")
 with open(log_file) as f:
     log_data = parse_logs(f.read())
 
-plot_losses(log_data)
+plot_losses(log_data,run_path)
