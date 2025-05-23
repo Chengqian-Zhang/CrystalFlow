@@ -71,7 +71,7 @@ def plot_metric(metrics, key, label, **style):
         plt.ylabel('Loss')
         plt.legend()
 
-expname="meanflow-CSP-mp20"
+expname="meanflow-CSP-mp20-keep-lattice"
 run_path = os.path.join(PROJECT_ROOT, "hydra/singlerun", expname)
 log_file = os.path.join(run_path, "run.metrics.log")
 
