@@ -1,6 +1,5 @@
 _target_: diffcsp.pl_modules.meanflow.CSPFlow
 time_dim: 256
-delta_t_dim: 256
 latent_dim: 0
 cost_type: 1.
 cost_coord: 1.

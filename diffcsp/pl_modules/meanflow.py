@@ -47,7 +47,6 @@ from diffcsp.pl_modules.lattice_utils import LatticeDecompNN
 # from diffcsp.pl_modules.ode_solvers import str_to_solver
 from diffcsp.pl_modules.symmetrize import SymmetrizeRotavg
 from diffcsp.pl_modules.conditioning import MultiEmbedding
-from diffcsp.pl_modules.time_scheduler import TimeScheduler
 from diffcsp.pl_modules.type_module import TypeTableModule
 
 MAX_ATOMIC_NUM = 100
@@ -73,77 +72,34 @@ class BaseModule(pl.LightningModule):
 
 ### Model definition
 
-
-class SinusoidalTimeEmbeddings(nn.Module):
-    """Attention is all you need."""
-
-    def __init__(self, dim):
-        super().__init__()
-        self.dim = dim
-
-    def forward(self, time):
-        device = time.device
-        half_dim = self.dim // 2
-        embeddings = math.log(10000) / (half_dim - 1)
-        embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
-        embeddings = time[:, None] * embeddings[None, :]
-        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
-        return embeddings
-
-class SinusoidalStartTimeEmbeddings(nn.Module):
-    """Attention is all you need."""
-
-    def __init__(self, dim):
-        super().__init__()
-        self.dim = dim
-
-    def forward(self, time):
-        device = time.device
-        half_dim = self.dim // 2
-        embeddings = math.log(10000) / (half_dim - 1)
-        embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
-        embeddings = time[:, None] * embeddings[None, :]
-        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
-        return embeddings
-
-
-class DirectUnsqueezeTime(nn.Module):
-    def forward(self, time: torch.Tensor):
-        return time.unsqueeze(-1)
-
-
 class CSPFlow(BaseModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         if self.hparams.time_dim == 0:
             self.time_dim = 1
-            self.time_embedding = DirectUnsqueezeTime()
-            self.start_time_embedding = DirectUnsqueezeTime()
         else:
             self.time_dim = self.hparams.time_dim
-            self.time_embedding = SinusoidalTimeEmbeddings(self.time_dim)
-            self.start_time_embedding = SinusoidalStartTimeEmbeddings(self.time_dim)
-        self.time_scheduler = TimeScheduler(self.hparams.get("time_scheduler", ""))
 
         self.guide_threshold = self.hparams.get("guide_threshold", None)
         if self.guide_threshold is not None:
             self.cond_emb = MultiEmbedding(**self.hparams.conditions)
-            cemb_dim = self.cond_emb.n_out
         else:
             self.cond_emb = None
-            cemb_dim = 1
         self.pred_type = self.hparams.decoder.get('pred_type', False)
         self.type_encoding = self.hparams.get('type_encoding', None)
         if self.type_encoding == "table":
             self.type_encoding = TypeTableModule()
+        self.lattice_polar = self.hparams.get("lattice_polar", False)
         self.decoder = hydra.utils.instantiate(
             self.hparams.decoder,
             type_encoding=self.type_encoding,
-            latent_dim=self.hparams.latent_dim + self.time_dim,  # 0 + time
-            delta_t_dim=self.hparams.get("delta_t_dim", 0),
-            cemb_dim=cemb_dim,
+            latent_dim=self.hparams.latent_dim + self.time_dim + self.time_dim,  # 0 + time + time
             _recursive_=False,
+            lattice_polar=self.lattice_polar,
+            time_dim=self.hparams.time_dim,
+            time_scheduler=self.hparams.get("time_scheduler", ""),
+            guide_threshold=self.hparams.get("guide_threshold", None), 
         )
         self.beta_scheduler = hydra.utils.instantiate(self.hparams.beta_scheduler)
         self.sigma_scheduler = hydra.utils.instantiate(self.hparams.sigma_scheduler)
@@ -152,7 +108,6 @@ class CSPFlow(BaseModule):
         self.ot = self.hparams.get("ot", False)
         self.permute_l = HungarianMatcher("norm")
         self.permute_f = HungarianMatcher("norm_mic")
-        self.lattice_polar = self.hparams.get("lattice_polar", False)
         self.lattice_polar_sigma = self.hparams.get("lattice_polar_sigma", 1.0)
         self.latticedecompnn = LatticeDecompNN()
         self.from_cubic = self.hparams.get("from_cubic", False)
@@ -207,6 +162,18 @@ class CSPFlow(BaseModule):
         if self.from_cubic:
             l0[:, :5] = 0
         return l0
+    
+    def build_tangents(self, input_lattice_rep, input_frac_coords, input_atom_types, start_times, times, num_atoms, batch, v_l, v_f):
+        if self.pred_type:
+            raise RuntimeError('Not implemented')
+        else:
+            v_a = torch.zeros_like(input_atom_types)
+            v_r = torch.zeros_like(start_times)
+            v_t = torch.ones_like(times)
+            v_num_atoms = torch.zeros_like(num_atoms)
+            v_batch = torch.zeros_like(batch)
+            return (v_l, v_f, v_a, v_r, v_t, v_num_atoms, v_batch)
+
 
     def forward(self, batch, guide_threshold=None):
 
@@ -215,14 +182,7 @@ class CSPFlow(BaseModule):
         _time2 = torch.rand(batch_size, device=self.device)
         start_times = torch.min(_time1, _time2)
         times = torch.max(_time1, _time2)
-        delta_times = times - start_times
         # TODO: percentage of delta_times = 0
-
-        times = self.time_scheduler(times)
-        delta_times = self.time_scheduler(delta_times)
-
-        time_emb = self.time_embedding(times)
-        delta_times_emb = self.start_time_embedding(delta_times)
 
         guide_threshold = self.guide_threshold if guide_threshold is None else guide_threshold
         if guide_threshold is None:
@@ -302,10 +262,6 @@ class CSPFlow(BaseModule):
         l_expand_dim = (slice(None),) + (None,) * (tar_l.dim() - 1)
         input_lattice_rep = lattices_rep_0 + times[l_expand_dim] * tar_l
         input_frac_coords = f0 + times.repeat_interleave(batch.num_atoms)[:, None] * tar_f
-        if self.lattice_polar:
-            input_lattice_mat = lattice_polar_build_torch(input_lattice_rep)
-        else:
-            input_lattice_mat = input_lattice_rep
         if self.pred_type:
             input_atom_type_probs = rd_atom_types_onehot + times.repeat_interleave(batch.num_atoms)[:, None] * tar_t
             input_atom_types = input_atom_type_probs
@@ -315,55 +271,53 @@ class CSPFlow(BaseModule):
         # Replace inputs if fixed
         if self.keep_coords:
             input_frac_coords = frac_coords
+            tar_f = torch.zeros_like(frac_coords)
         if self.keep_lattice:
             input_lattice_rep = lattices_rep_T
-            input_lattice_mat = lattices_mat_T
+            tar_l = torch.zeros_like(lattices_rep_T)
 
         # Flow
-        '''
-        pred, dudt = jvp(
-            self.decoder, 
-            (
-            time_emb,
-            input_atom_types,
-            input_frac_coords,
+        input_atom_types = input_atom_types.to(torch.float32)
+        batch.num_atoms = batch.num_atoms.to(torch.float32)
+        batch.batch = batch.batch.to(torch.float32)
+
+        tangents_tuple = self.build_tangents(
             input_lattice_rep,
+            input_frac_coords,
+            input_atom_types, #float32
+            start_times,
+            times,
+            batch.num_atoms, #float32
+            batch.batch, #float32
+            v_l=tar_l,
+            v_f=tar_f,
+        )
+
+        pred, dudt = jvp(
+            self.decoder,
+            (
+            input_lattice_rep,
+            input_frac_coords,
+            input_atom_types,
+            start_times,
+            times,
             batch.num_atoms,
             batch.batch,
-            input_lattice_mat,
-            cemb, 
-            guide_indicator,
-            delta_times_emb,
-            ), 
-            v=((tar_l,tar_f), 0, 1)
+            ),
+            tangents=tangents_tuple,
         )
-        '''
+
         if self.pred_type:
-            pred = self.decoder(
-                input_lattice_rep,
-                input_frac_coords,
-                input_atom_types,
-                start_times,
-                times,
-                batch.num_atoms,
-                batch.batch,
-            )
             pred_l, pred_f, pred_t = pred
         else:
-            pred, dudt = jvp(
-                self.decoder,
-                (
-                input_lattice_rep,
-                input_frac_coords,
-                input_atom_types,
-                start_times,
-                times,
-                batch.num_atoms,
-                batch.batch,
-                ),
-                v=()
-            )
             pred_l, pred_f = pred
+
+        batch.num_atoms = batch.num_atoms.detach().long()
+        pred_l_tgt = tar_l - (times[:,None] - start_times[:,None]) * dudt[0]
+        pred_f_tgt = tar_f - (times[:,None].repeat_interleave(batch.num_atoms, dim=0) - start_times[:,None].repeat_interleave(batch.num_atoms, dim=0)) * dudt[1]
+
+        pred_l_tgt_stopgrad = pred_l_tgt.detach()
+        pred_f_tgt_stopgrad = pred_f_tgt.detach()
 
         loss_sym_l = 0.0
         loss_sym_f = 0.0
@@ -400,10 +354,11 @@ class CSPFlow(BaseModule):
             pred_l = pred_l_symmetrized
             pred_f = pred_f_symmetrized
 
-        loss_lattice = F.mse_loss(pred_l, tar_l)
-        loss_coord = F.mse_loss(pred_f, tar_f)
+        loss_lattice = F.mse_loss(pred_l, pred_l_tgt_stopgrad)
+        loss_coord = F.mse_loss(pred_f, pred_f_tgt_stopgrad)
         if self.pred_type:
-            loss_type = F.mse_loss(pred_t, tar_t)
+            raise RuntimeError('Not implemented')
+            #loss_type = F.mse_loss(pred_t, tar_t)
         else:
             loss_type = 0.0
 

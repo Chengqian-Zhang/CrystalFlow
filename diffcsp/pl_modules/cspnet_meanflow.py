@@ -17,7 +17,9 @@ from diffcsp.common.data_utils import (
     repeat_blocks,
     get_reciprocal_lattice_torch,
     get_max_neighbors_mask,
+    lattice_polar_build_torch,
 )
+from diffcsp.pl_modules.time_scheduler import TimeScheduler
 
 MAX_ATOMIC_NUM = 100
 
@@ -177,6 +179,42 @@ class CSPLayer(nn.Module):
         node_output = self.node_model(node_features, edge_features, edge_index)
         return node_input + node_output
 
+class DirectUnsqueezeTime(nn.Module):
+    def forward(self, time: torch.Tensor):
+        return time.unsqueeze(-1)
+
+
+class SinusoidalTimeEmbeddings(nn.Module):
+    """Attention is all you need."""
+
+    def __init__(self, dim):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, time):
+        device = time.device
+        half_dim = self.dim // 2
+        embeddings = math.log(10000) / (half_dim - 1)
+        embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
+        embeddings = time[:, None] * embeddings[None, :]
+        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+        return embeddings
+
+class SinusoidalStartTimeEmbeddings(nn.Module):
+    """Attention is all you need."""
+
+    def __init__(self, dim):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, time):
+        device = time.device
+        half_dim = self.dim // 2
+        embeddings = math.log(10000) / (half_dim - 1)
+        embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
+        embeddings = time[:, None] * embeddings[None, :]
+        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+        return embeddings
 
 class CSPNet(nn.Module):
 
@@ -185,7 +223,6 @@ class CSPNet(nn.Module):
         hidden_dim=128,
         latent_dim=256,
         lattice_dim=9,
-        cemb_dim=1,
         num_layers=4,
         max_atoms=100,
         act_fn='silu',
@@ -204,13 +241,34 @@ class CSPNet(nn.Module):
         pred_type=False,
         pred_scalar=False,
         type_encoding=None | nn.Module,
-        delta_t_dim=0,
+        lattice_polar=False,
+        time_dim=0,
+        time_scheduler=None,
+        guide_threshold=None,
     ):
         super(CSPNet, self).__init__()
 
         self.ip = ip
         self.smooth = smooth
         self.type_encoding = type_encoding
+        self.lattice_polar = lattice_polar
+        if time_dim == 0:
+            self.time_dim = 1
+            self.time_embedding = DirectUnsqueezeTime()
+            self.start_time_embedding = DirectUnsqueezeTime()
+        else:
+            self.time_dim = time_dim
+            self.time_embedding = SinusoidalTimeEmbeddings(self.time_dim)
+            self.start_time_embedding = SinusoidalStartTimeEmbeddings(self.time_dim)
+        self.time_scheduler = TimeScheduler(time_scheduler)
+
+        self.guide_threshold = guide_threshold
+        if self.guide_threshold is not None:
+            self.cond_emb = MultiEmbedding(**self.hparams.conditions)
+            cemb_dim = self.cond_emb.n_out
+        else:
+            self.cond_emb = None
+            cemb_dim = 1
         if self.type_encoding is None:
             if self.smooth:
                 self.node_embedding = nn.Linear(MAX_ATOMIC_NUM, hidden_dim)
@@ -218,7 +276,7 @@ class CSPNet(nn.Module):
                 self.node_embedding = nn.Embedding(MAX_ATOMIC_NUM, hidden_dim)
         else:
             self.node_embedding = nn.Linear(self.type_encoding.out_dim, hidden_dim)
-        self.atom_latent_emb = nn.Linear(hidden_dim + latent_dim + delta_t_dim, hidden_dim)
+        self.atom_latent_emb = nn.Linear(hidden_dim + latent_dim, hidden_dim)
         if act_fn == 'silu':
             self.act_fn = nn.SiLU()
         if dis_emb == 'sin':
@@ -435,12 +493,34 @@ class CSPNet(nn.Module):
         else:
             raise ValueError(f"Unknown type of edge style: {self.edge_style}")
 
-    def forward(self, t, atom_types, frac_coords, lattices_rep, num_atoms, node2graph, lattices_mat=None, cemb=None, guide_indicator=None, delta_t=None):
+    #def forward(self, t, atom_types, frac_coords, lattices_rep, num_atoms, node2graph, lattices_mat=None, cemb=None, guide_indicator=None):
+    def forward(self, lattices_rep, frac_coords, atom_types, r, t, num_atoms, node2graph):
 
-        if lattices_mat is None:
+        if self.smooth:
+            raise RuntimeError("Smooth mode is not supported for CSPNet")
+        else:
+            atom_types = atom_types.detach().long()
+            num_atoms = num_atoms.detach().long()
+            node2graph = node2graph.detach().long()
+            assert not atom_types.requires_grad
+            assert not num_atoms.requires_grad
+            assert not node2graph.requires_grad
+
+        if self.lattice_polar:
+            lattices_mat = lattice_polar_build_torch(lattices_rep)
+        else:
             lattices_mat = lattices_rep
-        if delta_t is not None:
-            meanflow=True
+
+        cemb = None #hard code at this moment
+        guide_indicator = None #hard code at this moment
+
+        delta_t = t - r
+        t = self.time_scheduler(t)
+        delta_t = self.time_scheduler(delta_t)
+
+        t = self.time_embedding(t)
+        delta_t = self.start_time_embedding(delta_t)
+
         edges, frac_diff = self.gen_edges(num_atoms, frac_coords, lattices_mat, node2graph)
         edge2graph = node2graph[edges[0]]
         if self.smooth:
@@ -449,11 +529,8 @@ class CSPNet(nn.Module):
             node_features = self.node_embedding(atom_types - 1)
 
         t_per_atom = t.repeat_interleave(num_atoms, dim=0)
-        if delta_t is not None:
-            delta_t_per_atom = delta_t.repeat_interleave(num_atoms, dim=0)
-            node_features = torch.cat([node_features, t_per_atom, delta_t_per_atom], dim=1)
-        else:
-            node_features = torch.cat([node_features, t_per_atom], dim=1)
+        delta_t_per_atom = delta_t.repeat_interleave(num_atoms, dim=0)
+        node_features = torch.cat([node_features, t_per_atom, delta_t_per_atom], dim=1)
         node_features = self.atom_latent_emb(node_features)
 
         for i in range(0, self.num_layers):
