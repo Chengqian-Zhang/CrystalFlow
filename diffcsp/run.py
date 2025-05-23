@@ -21,7 +21,6 @@ from lightning.pytorch.callbacks import (
 )
 from lightning.pytorch.profilers import SimpleProfiler as Profiler
 from lightning.pytorch.loggers import WandbLogger
-from IPython import embed
 
 try:
     from finetuning_scheduler import FinetuningScheduler

@@ -12,7 +12,6 @@ from omegaconf import ValueNode
 from torch import Tensor
 from torch.utils.data import Dataset
 from torch_geometric.data import Data
-from IPython import embed
 
 from diffcsp.common.utils import PROJECT_ROOT
 from diffcsp.common.data_utils import (

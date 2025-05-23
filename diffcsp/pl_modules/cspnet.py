@@ -7,7 +7,6 @@ from torch_scatter import scatter
 from torch_scatter.composite import scatter_softmax
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
 from einops import rearrange, repeat
-from IPython import embed
 
 from diffcsp.common.data_utils import (
     lattice_params_to_matrix_torch,

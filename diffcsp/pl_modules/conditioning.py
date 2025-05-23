@@ -3,7 +3,6 @@ import hydra
 import torch
 import torch.nn as nn
 from torch_scatter import scatter
-from IPython import embed
 
 
 def build_mlp(in_dim, hidden_dim, fc_num_layers, out_dim, dropout=0., *args, **kwargs):
