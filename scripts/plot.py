@@ -11,7 +11,7 @@ from IPython import embed
 def parse_logs(log_text):
     metrics = defaultdict(list)
     
-    for line in log_text.split('\n')[3:]:
+    for line in log_text.split('\n')[3:-2]:
         if '[metrics][INFO]' not in line:
             continue
         

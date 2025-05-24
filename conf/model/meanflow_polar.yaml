@@ -2,6 +2,7 @@ _target_: diffcsp.pl_modules.meanflow.CSPFlow
 time_dim: 256
 latent_dim: 0
 cost_type: 1.
+p_same_time: 0.
 cost_coord: 1.
 cost_lattice: 1.
 max_neighbors: 20  # maximum number of neighbors for OTF graph bulding in decoder

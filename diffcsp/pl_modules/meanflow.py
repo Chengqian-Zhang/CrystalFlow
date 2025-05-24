@@ -80,6 +80,7 @@ class CSPFlow(BaseModule):
             self.time_dim = 1
         else:
             self.time_dim = self.hparams.time_dim
+        self.p_same_time = self.hparams.p_same_time
 
         self.guide_threshold = self.hparams.get("guide_threshold", None)
         if self.guide_threshold is not None:
@@ -176,11 +177,27 @@ class CSPFlow(BaseModule):
     def forward(self, batch, guide_threshold=None):
 
         batch_size = batch.num_graphs
-        _time1 = torch.rand(batch_size, device=self.device)
-        _time2 = torch.rand(batch_size, device=self.device)
-        start_times = torch.min(_time1, _time2)
-        times = torch.max(_time1, _time2)
-        # TODO: percentage of delta_times = 0
+        mask = torch.rand(batch_size, device=self.device) < self.p_same_time
+        if self.p_same_time == 0:
+            _time1 = torch.rand(batch_size, device=self.device)
+            _time2 = torch.rand(batch_size, device=self.device)
+            start_times = torch.min(_time1, _time2)
+            times = torch.max(_time1, _time2)
+        else:
+            mask = torch.rand(batch_size, device=self.device) < self.p_same_time
+            equal_values = torch.rand(batch_size, device=self.device)
+            start_times = torch.zeros_like(equal_values)
+            times = torch.zeros_like(equal_values)
+            start_times[mask] = equal_values[mask]
+            times[mask] = equal_values[mask]
+            non_mask = ~mask
+            non_count = non_mask.sum().item()
+            _time1 = torch.rand(non_count, device=self.device)
+            _time2 = torch.rand(non_count, device=self.device)
+            start_non = torch.min(_time1, _time2)
+            time_non = torch.max(_time1, _time2)
+            start_times[non_mask] = start_non
+            times[non_mask] = time_non
 
         guide_threshold = self.guide_threshold if guide_threshold is None else guide_threshold
         if guide_threshold is None:
