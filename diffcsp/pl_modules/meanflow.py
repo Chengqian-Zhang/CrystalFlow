@@ -164,15 +164,6 @@ class CSPFlow(BaseModule):
         if self.from_cubic:
             l0[:, :5] = 0
         return l0
-    
-    def build_tangents(self, input_lattice_rep, input_frac_coords, start_times, times, v_l, v_f):
-        if self.pred_type:
-            raise RuntimeError('Not implemented')
-        else:
-            v_r = torch.zeros_like(start_times)
-            v_t = torch.ones_like(times)
-            return (v_l, v_f, v_r, v_t)
-
 
     def forward(self, batch, guide_threshold=None):
 
@@ -295,23 +286,13 @@ class CSPFlow(BaseModule):
 
         # Flow
 
-        tangents_tuple = self.build_tangents(
-            input_lattice_rep,
-            input_frac_coords,
-            start_times,
-            times,
-            v_l=tar_l,
-            v_f=tar_f,
-        )
-
         # input need grad to compute jvp
+        # Actually, it is useless here, because the dudt is the same no matter if requires_grad=True
         input_lattice_rep.requires_grad_(True)
         input_frac_coords.requires_grad_(True)
         start_times.requires_grad_(True)
         times.requires_grad_(True)
         input_atom_types.requires_grad_(True)
-        #batch.num_atoms.requires_grad_(True)
-        #batch.batch.requires_grad_(True)
 
         #pred = self.decoder(input_lattice_rep,input_frac_coords,start_times,times,input_atom_types,batch.num_atoms,batch.batch)
 
@@ -340,9 +321,12 @@ class CSPFlow(BaseModule):
         pred_f_tgt = tar_f - (times[:,None].repeat_interleave(batch.num_atoms, dim=0) - start_times[:,None].repeat_interleave(batch.num_atoms, dim=0)) * dudt[1]
         pred_f_tgt = (pred_f_tgt-0.5) % 1 - 0.5
         '''
-        # lattice JVP
+
         def forward_lattice(*inputs):
             return self.decoder(*inputs)[0]
+
+        def forward_coord(*inputs):
+            return self.decoder(*inputs)[1]
 
         pred_l, dudt_l = jvp(
             forward_lattice,
@@ -362,10 +346,6 @@ class CSPFlow(BaseModule):
             ),
             argnums=(0,2,3),
         )
-
-        # coord JVP
-        def forward_coord(*inputs):
-            return self.decoder(*inputs)[1]
 
         pred_f, dudt_f = jvp(
             forward_coord,
