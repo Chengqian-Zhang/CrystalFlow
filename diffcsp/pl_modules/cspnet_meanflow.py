@@ -245,11 +245,15 @@ class CSPNet(nn.Module):
         time_dim=0,
         time_scheduler=None,
         guide_threshold=None,
+        not_pred_type_but_one_hot=False,
     ):
         super(CSPNet, self).__init__()
 
         self.ip = ip
         self.smooth = smooth
+        self.not_pred_type_but_one_hot = not_pred_type_but_one_hot
+        if self.not_pred_type_but_one_hot:
+            self.smooth = True
         self.type_encoding = type_encoding
         self.lattice_polar = lattice_polar
         if time_dim == 0:

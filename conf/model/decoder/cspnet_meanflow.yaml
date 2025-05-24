@@ -10,6 +10,7 @@ num_freqs: 128
 rec_emb: none
 num_millers: 5
 edge_style: fc
+not_pred_type_but_one_hot: true
 max_neighbors: ${model.max_neighbors}
 cutoff: ${model.radius}
 ln: true

@@ -88,6 +88,7 @@ class CSPFlow(BaseModule):
             self.cond_emb = None
         self.pred_type = self.hparams.decoder.get('pred_type', False)
         self.type_encoding = self.hparams.get('type_encoding', None)
+        self.not_pred_type_but_one_hot = self.hparams.decoder.get('not_pred_type_but_one_hot', False)
         if self.type_encoding == "table":
             self.type_encoding = TypeTableModule()
         self.lattice_polar = self.hparams.get("lattice_polar", False)
@@ -264,6 +265,8 @@ class CSPFlow(BaseModule):
             input_atom_types = input_atom_type_probs
         else:
             input_atom_types = batch.atom_types
+        if self.not_pred_type_but_one_hot:
+            input_atom_types = F.one_hot(batch.atom_types - 1, num_classes=MAX_ATOMIC_NUM).float()
 
         # Replace inputs if fixed
         if self.keep_coords:
@@ -284,6 +287,18 @@ class CSPFlow(BaseModule):
             v_f=tar_f,
         )
 
+        # input need grad to compute jvp
+        input_lattice_rep.requires_grad_(True)
+        input_frac_coords.requires_grad_(True)
+        start_times.requires_grad_(True)
+        times.requires_grad_(True)
+        input_atom_types.requires_grad_(True)
+        #batch.num_atoms.requires_grad_(True)
+        #batch.batch.requires_grad_(True)
+
+        #pred = self.decoder(input_lattice_rep,input_frac_coords,start_times,times,input_atom_types,batch.num_atoms,batch.batch)
+
+        '''
         pred, dudt = jvp(
             self.decoder,
             (
@@ -306,6 +321,56 @@ class CSPFlow(BaseModule):
 
         pred_l_tgt = tar_l - (times[:,None] - start_times[:,None]) * dudt[0]
         pred_f_tgt = tar_f - (times[:,None].repeat_interleave(batch.num_atoms, dim=0) - start_times[:,None].repeat_interleave(batch.num_atoms, dim=0)) * dudt[1]
+        pred_f_tgt = (pred_f_tgt-0.5) % 1 - 0.5
+        '''
+        # lattice JVP
+        def forward_lattice(*inputs):
+            return self.decoder(*inputs)[0]
+
+        pred_l, dudt_l = jvp(
+            forward_lattice,
+            (
+                input_lattice_rep,
+                input_frac_coords,
+                start_times,
+                times,
+                input_atom_types,
+                batch.num_atoms,
+                batch.batch,
+            ),
+            tangents=(
+                tar_l,
+                torch.zeros_like(start_times),
+                torch.ones_like(times),
+            ),
+            argnums=(0,2,3),
+        )
+
+        # coord JVP
+        def forward_coord(*inputs):
+            return self.decoder(*inputs)[1]
+
+        pred_f, dudt_f = jvp(
+            forward_coord,
+            (
+                input_lattice_rep,
+                input_frac_coords,
+                start_times,
+                times,
+                input_atom_types,
+                batch.num_atoms,
+                batch.batch,
+            ),
+            tangents=(
+                tar_f,
+                torch.zeros_like(start_times),
+                torch.ones_like(times),
+            ),
+            argnums=(1,2,3),
+        )
+
+        pred_l_tgt = tar_l - (times[:,None] - start_times[:,None]) * dudt_l
+        pred_f_tgt = tar_f - (times[:,None].repeat_interleave(batch.num_atoms, dim=0) - start_times[:,None].repeat_interleave(batch.num_atoms, dim=0)) * dudt_f
         pred_f_tgt = (pred_f_tgt-0.5) % 1 - 0.5
 
         pred_l_tgt_stopgrad = pred_l_tgt.detach()

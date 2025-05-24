@@ -1,6 +1,6 @@
 import os
 from diffcsp.common.utils import log_hyperparameters, PROJECT_ROOT
-import re
+import re,sys
 import json
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,7 +11,7 @@ from IPython import embed
 def parse_logs(log_text):
     metrics = defaultdict(list)
     
-    for line in log_text.split('\n')[2:]:
+    for line in log_text.split('\n')[3:]:
         if '[metrics][INFO]' not in line:
             continue
         
@@ -37,18 +37,24 @@ def plot_losses(metrics, run_path):
     plt.subplot(2, 2, 1)
     plot_metric(metrics, 'train_loss_epoch', 'training loss', color='blue')
     plot_metric(metrics, 'val_loss', 'validation loss', color='orange')
+    plt.yscale('log')
+    plt.xscale('log')
     plt.title('Total Loss')
     
     # 晶格损失
     plt.subplot(2, 2, 2)
     plot_metric(metrics, 'lattice_loss_epoch', 'train lattice', color='green')
     plot_metric(metrics, 'val_lattice_loss', 'val lattice', color='red')
+    plt.yscale('log')
+    plt.xscale('log')
     plt.title('Lattice Loss')
     
     # 坐标损失
     plt.subplot(2, 2, 3)
     plot_metric(metrics, 'coord_loss_epoch', 'train coord', color='purple')
     plot_metric(metrics, 'val_coord_loss', 'val coord', color='brown')
+    plt.yscale('log')
+    plt.xscale('log')
     plt.title('Coordinate Loss')
     
     # 损失分量分布
@@ -66,12 +72,12 @@ def plot_losses(metrics, run_path):
 def plot_metric(metrics, key, label, **style):
     if key in metrics:
         values = [np.mean(epoch_data) for epoch_data in metrics[key]]
-        plt.plot(metrics['epoch'], values, label=label, **style)
+        plt.plot(metrics['epoch'][3:], values[3:], label=label, **style)
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
         plt.legend()
 
-expname="meanflow-CSP-mp20-keep-lattice"
+expname=sys.argv[1]
 run_path = os.path.join(PROJECT_ROOT, "hydra/singlerun", expname)
 log_file = os.path.join(run_path, "run.metrics.log")
 
