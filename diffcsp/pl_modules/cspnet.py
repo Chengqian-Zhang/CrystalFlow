@@ -216,7 +216,7 @@ class CSPNet(nn.Module):
                 self.node_embedding = nn.Embedding(MAX_ATOMIC_NUM, hidden_dim)
         else:
             self.node_embedding = nn.Linear(self.type_encoding.out_dim, hidden_dim)
-        self.atom_latent_emb = nn.Linear(hidden_dim + latent_dim, hidden_dim)
+        self.atom_latent_emb = nn.Linear(hidden_dim + latent_dim + latent_dim, hidden_dim)
         if act_fn == 'silu':
             self.act_fn = nn.SiLU()
         if dis_emb == 'sin':
@@ -433,7 +433,7 @@ class CSPNet(nn.Module):
         else:
             raise ValueError(f"Unknown type of edge style: {self.edge_style}")
 
-    def forward(self, t, atom_types, frac_coords, lattices_rep, num_atoms, node2graph, lattices_mat=None, cemb=None, guide_indicator=None):
+    def forward(self, t, dt, atom_types, frac_coords, lattices_rep, num_atoms, node2graph, lattices_mat=None, cemb=None, guide_indicator=None):
 
         if lattices_mat is None:
             lattices_mat = lattices_rep
@@ -445,7 +445,8 @@ class CSPNet(nn.Module):
             node_features = self.node_embedding(atom_types - 1)
 
         t_per_atom = t.repeat_interleave(num_atoms, dim=0)
-        node_features = torch.cat([node_features, t_per_atom], dim=1)
+        dt_per_atom = dt.repeat_interleave(num_atoms, dim=0)
+        node_features = torch.cat([node_features, t_per_atom, dt_per_atom], dim=1)
         node_features = self.atom_latent_emb(node_features)
 
         for i in range(0, self.num_layers):
