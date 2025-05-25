@@ -406,7 +406,11 @@ class CSPFlow(BaseModule):
             input_lattice_mat_flow = lattices_mat_T_flow
 
         # time embedding
-        dt_flow = torch.zeros_like(t_flow)
+        # TODO: need to consider dt_flow
+        #dt_flow = torch.zeros_like(t_flow)
+        dt_flow = torch.ones_like(t_flow)
+        dt_flow = dt_flow/self.denoise_timesteps
+
         t_flow_emb = self.time_embedding(t_flow)
         dt_flow_emb = self.time_embedding(dt_flow)
 
