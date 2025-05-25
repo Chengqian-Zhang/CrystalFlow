@@ -457,7 +457,6 @@ class CSPFlow(BaseModule):
             + self.cost_sym_lattice * loss_sym_l
             + self.cost_sym_coord   * loss_sym_f
         )
-        embed()
 
         return {
             'loss': loss,
