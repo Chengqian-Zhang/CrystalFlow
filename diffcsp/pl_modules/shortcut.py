@@ -304,10 +304,17 @@ class CSPFlow(BaseModule):
         time_emb = self.time_embedding(times)
         dt_bootstrap_emb = self.time_embedding(dt_bootstrap)
 
+        dt_bootstrap_query = torch.where(
+            dt_bootstrap == 1/self.denoise_timesteps,
+            torch.tensor(0.0, device=dt_bootstrap.device),
+            dt_bootstrap,
+        )
+        dt_bootstrap_query_embed = self.time_embedding(dt_bootstrap_query)
+
         # Flow
         vb1 = self.decoder(
             t=time_emb,
-            dt=dt_bootstrap_emb,
+            dt=dt_bootstrap_query_embed,
             atom_types=input_atom_types,
             frac_coords=input_frac_coords,
             lattices_rep=input_lattice_rep,
@@ -335,7 +342,7 @@ class CSPFlow(BaseModule):
         
         vb2 = self.decoder(
             t=t2_emb,
-            dt=dt_bootstrap_emb,
+            dt=dt_bootstrap_query_embed,
             atom_types=input_atom_types,
             frac_coords=input_frac_coords_t2,
             lattices_rep=input_lattice_rep_t2,
@@ -407,9 +414,9 @@ class CSPFlow(BaseModule):
 
         # time embedding
         # TODO: need to consider dt_flow
-        #dt_flow = torch.zeros_like(t_flow)
-        dt_flow = torch.ones_like(t_flow)
-        dt_flow = dt_flow/self.denoise_timesteps
+        dt_flow = torch.zeros_like(t_flow)
+        #dt_flow = torch.ones_like(t_flow)
+        #dt_flow = dt_flow/self.denoise_timesteps
 
         t_flow_emb = self.time_embedding(t_flow)
         dt_flow_emb = self.time_embedding(dt_flow)
