@@ -167,6 +167,7 @@ class CSPFlow(BaseModule):
         self.denoise_timesteps = self.hparams.denoise_timesteps
         self.bootstrap_ratio = self.hparams.bootstrap_ratio
         self.bootstrap_dt_bias = self.hparams.bootstrap_dt_bias
+        self.time_method = self.hparams.time_method
 
     def sample_lengths(self, num_atoms, batch_size):
         loc = math.log(2)
@@ -196,45 +197,53 @@ class CSPFlow(BaseModule):
 
         generator = torch.Generator(device=self.device)
         batch_size = batch.num_graphs
+        bootstrap_batchsize = int(batch_size * self.bootstrap_ratio)
 
         # 1) Sample dt
-        bootstrap_batchsize = int(batch_size * self.bootstrap_ratio)
-        log2_sections = int(np.log2(self.denoise_timesteps))
-        if self.bootstrap_dt_bias == 0:
-            dt_base = torch.repeat_interleave(
-                log2_sections - 1 - torch.arange(log2_sections, device=self.device),
-                repeats=bootstrap_batchsize // log2_sections
-            )
-            dt_base = torch.cat([dt_base, torch.zeros(bootstrap_batchsize - dt_base.shape[0], device=self.device)])
-            num_dt_cfg = bootstrap_batchsize // log2_sections
+        if self.time_method == "discrete":
+            log2_sections = int(np.log2(self.denoise_timesteps))
+            if self.bootstrap_dt_bias == 0:
+                dt_base = torch.repeat_interleave(
+                    log2_sections - 1 - torch.arange(log2_sections, device=self.device),
+                    repeats=bootstrap_batchsize // log2_sections
+                )
+                dt_base = torch.cat([dt_base, torch.zeros(bootstrap_batchsize - dt_base.shape[0], device=self.device)])
+                num_dt_cfg = bootstrap_batchsize // log2_sections
+            else:
+                dt_base = torch.repeat_interleave(
+                    log2_sections - 1 - torch.arange(log2_sections-2, device=self.device),
+                    repeats=(bootstrap_batchsize // 2) // log2_sections
+                )
+                dt_base = torch.cat([
+                    dt_base,
+                    torch.ones(bootstrap_batchsize // 4, device=self.device),
+                    torch.zeros(bootstrap_batchsize // 4, device=self.device)
+                ])
+                num_dt_cfg = (bootstrap_batchsize // 2) // log2_sections
+            dt_base = dt_base.float()
+            dt = 1 / (2 ** (dt_base))  # [1, 1/2, 1/4...]
+            dt_base_bootstrap = dt_base + 1
+            dt_bootstrap = dt / 2
+
+            # 2) Sample t.
+            dt_sections = torch.pow(2, dt_base)  # [1,2,4,8...]
+            t = (torch.rand(
+                size=(bootstrap_batchsize,),
+                generator=generator,
+                device=self.device
+            ) * dt_sections.float()).floor().float()
+            t = t / dt_sections
+            times = t
+            #times = torch.rand(batch_size, device=self.device)
+            #times = self.time_scheduler(times)
+        elif self.time_method == "uniform":
+            times = torch.rand(bootstrap_batchsize, generator=generator, device=self.device)
+            max_dt = 1.0 - times
+            dt = torch.rand_like(times) * max_dt
+            assert torch.all(times + dt <= 1.0).item()
+            dt_bootstrap = dt / 2
         else:
-            dt_base = torch.repeat_interleave(
-                log2_sections - 1 - torch.arange(log2_sections-2, device=self.device),
-                repeats=(bootstrap_batchsize // 2) // log2_sections
-            )
-            dt_base = torch.cat([
-                dt_base, 
-                torch.ones(bootstrap_batchsize // 4, device=self.device),
-                torch.zeros(bootstrap_batchsize // 4, device=self.device)
-            ])
-            num_dt_cfg = (bootstrap_batchsize // 2) // log2_sections
-        dt_base = dt_base.float()
-        dt = 1 / (2 ** (dt_base))  # [1, 1/2, 1/4...]
-        dt_base_bootstrap = dt_base + 1
-        dt_bootstrap = dt / 2
-        
-        # 2) Sample t.
-        dt_sections = torch.pow(2, dt_base)  # [1,2,4,8...]
-        t = (torch.rand(
-            size=(bootstrap_batchsize,), 
-            generator=generator, 
-            device=self.device
-        ) * dt_sections.float()).floor().float()
-        t = t / dt_sections
-        #t_full = t.view(-1, 1, 1, 1) ??
-        times = t
-        #times = torch.rand(batch_size, device=self.device)
-        #times = self.time_scheduler(times)
+            raise RuntimeError("Not implemented")
 
         guide_threshold = self.guide_threshold if guide_threshold is None else guide_threshold
         if guide_threshold is None:
@@ -359,12 +368,17 @@ class CSPFlow(BaseModule):
         # =========== Generate Flow-Matching Targets ============  
         flow_batchsize = batch_size - bootstrap_batchsize
         # Sample t
-        t_flow = (torch.rand(
-            size=(flow_batchsize,), 
-            generator=generator, 
-            device=self.device
-        ) * self.denoise_timesteps).floor().float()
-        t_flow = t_flow / self.denoise_timesteps
+        if self.time_method == "discrete":
+            t_flow = (torch.rand(
+                size=(flow_batchsize,),
+                generator=generator,
+                device=self.device
+            ) * self.denoise_timesteps).floor().float()
+            t_flow = t_flow / self.denoise_timesteps
+        elif self.time_method == "uniform":
+            t_flow = torch.rand(size=(flow_batchsize,), generator=generator, device=self.device)
+        else:
+            raise RuntimeError("Not implemented")
 
         # Sample flow pairs x_t, v_t.
         if self.lattice_polar:
@@ -406,10 +420,13 @@ class CSPFlow(BaseModule):
             input_lattice_mat_flow = lattices_mat_T_flow
 
         # time embedding
-        # TODO: need to consider dt_flow
-        #dt_flow = torch.zeros_like(t_flow)
-        dt_flow = torch.ones_like(t_flow)
-        dt_flow = dt_flow/self.denoise_timesteps
+        if self.time_method == "discrete":
+            dt_flow = torch.ones_like(t_flow)
+            dt_flow = dt_flow/self.denoise_timesteps
+        elif self.time_method == "uniform":
+            dt_flow = torch.zeros_like(t_flow)
+        else:
+            raise RuntimeError("Not implemented")
 
         t_flow_emb = self.time_embedding(t_flow)
         dt_flow_emb = self.time_embedding(dt_flow)
