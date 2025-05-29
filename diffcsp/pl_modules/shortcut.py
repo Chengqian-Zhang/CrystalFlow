@@ -616,12 +616,15 @@ class CSPFlow(BaseModule):
         else:
             t_t = batch.atom_types
 
+        assert self.denoise_timesteps % N == 0, f"In shortcut training, --ode-int-steps must be divisible by denoise_timesteps."
 
-        for t in tqdm(range(1, N + 1)):
+        for t in tqdm(range(N)): # if N = 64, modify to t = (0,1,2...63), origin is t = (1,2,3..64) by xiaoshan
 
-            t_stamp = t / N
+            t_stamp = t / N # t_stamp = 0
             times = torch.full((batch_size,), t_stamp, device=self.device)
+            dt_query = torch.full((batch_size,), step_lr, device=self.device)
             time_emb = self.time_embedding(times)
+            dt_query_emb = self.time_embedding(dt_query)
 
             if self.keep_coords:
                 f_t = f_T
@@ -638,6 +641,7 @@ class CSPFlow(BaseModule):
             else:
                 pred = self.decoder(
                     t=time_emb,
+                    dt=dt_query_emb,
                     atom_types=t_t,
                     frac_coords=f_t,
                     lattices_rep=l_t,
@@ -684,11 +688,11 @@ class CSPFlow(BaseModule):
             # ========= pred each step end =========
 
             # ========= update each step start =========
-            l_t = l_t + pred_l / N if not self.keep_lattice else l_t
-            f_t = f_t + pred_f / N if not self.keep_coords else f_t
+            l_t = l_t + pred_l * step_lr if not self.keep_lattice else l_t
+            f_t = f_t + pred_f * step_lr if not self.keep_coords else f_t
             f_t = f_t % 1.0
             if self.pred_type:
-                t_t = t_t + pred_t / N
+                t_t = t_t + pred_t * step_lr
             # ========= update each step end =========
 
             # ========= build trajectory start =========
@@ -703,7 +707,7 @@ class CSPFlow(BaseModule):
                 else:
                     atom_types = self.type_encoding.decode_types(t_t)
 
-            traj[t] = {
+            traj[t+1] = {
                 'num_atoms': batch.num_atoms,
                 'atom_types': atom_types,
                 'frac_coords': f_t,
