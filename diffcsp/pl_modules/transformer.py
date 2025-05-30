@@ -182,16 +182,10 @@ class CSPLayer(nn.Module):
     ):
         super(CSPLayer, self).__init__()
         self.attention = MultiHeadAttention(hidden_dim, num_heads, lattice_dim, act_fn, use_angles, dis_emb, rec_emb, na_emb, ip)
-        self.feed_forward = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            act_fn,
-            nn.Linear(hidden_dim, hidden_dim),
-        )
 
         self.ln = ln
         if self.ln:
-            self.attention_layer_norm = nn.LayerNorm(hidden_dim)
-            self.feed_forward_layer_norm = nn.LayerNorm(hidden_dim)
+            self.layer_norm = nn.LayerNorm(hidden_dim)
 
     def forward(
         self, node_features, frac_coords, lattices_rep, edge_index, edge2graph,
