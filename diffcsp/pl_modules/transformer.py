@@ -59,30 +59,25 @@ class MultiHeadAttention(nn.Module):
             self.dis_dim += 3
 
         # Define MLP for Q/K/V
-        '''
         self.query_mlp = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             act_fn,
             nn.Linear(hidden_dim, hidden_dim),
-            act_fn,
         )
         self.key_mlp = nn.Sequential(
             nn.Linear(hidden_dim*2 + lattice_dim + self.dis_dim, hidden_dim),
             act_fn,
             nn.Linear(hidden_dim, hidden_dim),
-            act_fn,
         )
         self.value_mlp = nn.Sequential(
             nn.Linear(hidden_dim*2 + lattice_dim + self.dis_dim, hidden_dim),
             act_fn,
             nn.Linear(hidden_dim, hidden_dim),
-            act_fn,
         )
-        '''
         self.query_linear = nn.Linear(hidden_dim, hidden_dim, bias=False)
         self.key_linear = nn.Linear(hidden_dim*2 + lattice_dim + self.dis_dim, hidden_dim)
         self.value_linear = nn.Linear(hidden_dim*2 + lattice_dim + self.dis_dim, hidden_dim)
-        self.output_linear = nn.Linear(hidden_dim, hidden_dim, bias=False)
+        self.output_linear = nn.Linear(hidden_dim, hidden_dim)
     
     def forward(
         self, 
@@ -104,8 +99,8 @@ class MultiHeadAttention(nn.Module):
         h = node_features
         assert frac_diff is not None
 
-        #q = self.query_mlp(h[edge_index[0]]) # [nedge, hidden_dim]
-        q = self.query_linear(h[edge_index[0]])
+        q = self.query_mlp(h[edge_index[0]]) # [nedge, hidden_dim]
+        #q = self.query_linear(h[edge_index[0]])
 
         kv_input = [h[edge_index[0]], h[edge_index[1]]]
 
@@ -142,16 +137,16 @@ class MultiHeadAttention(nn.Module):
         kv_input_concat = torch.cat(kv_input, dim=1)
         assert len(kv_input_concat.shape) == 2
 
-        #k = self.key_mlp(kv_input_concat) # [nedge, hidden_dim]
-        #v = self.value_mlp(kv_input_concat) # [nedge, hidden_dim]
-        k = self.key_linear(kv_input_concat)
-        v = self.value_linear(kv_input_concat)
+        k = self.key_mlp(kv_input_concat) # [nedge, hidden_dim]
+        v = self.value_mlp(kv_input_concat) # [nedge, hidden_dim]
+        #k = self.key_linear(kv_input_concat)
+        #v = self.value_linear(kv_input_concat)
         assert q.shape == k.shape == v.shape
 
         # split Q/K/V to num_heads
-        q = q.view(-1, self.num_heads, self.head_dim) # [nedge, num_heads, head_dim]
-        k = k.view(-1, self.num_heads, self.head_dim) # [nedge, num_heads, head_dim]
-        v = v.view(-1, self.num_heads, self.head_dim) # [nedge, num_heads, head_dim]
+        q = q.reshape(-1, self.num_heads, self.head_dim) # [nedge, num_heads, head_dim]
+        k = k.reshape(-1, self.num_heads, self.head_dim) # [nedge, num_heads, head_dim]
+        v = v.reshape(-1, self.num_heads, self.head_dim) # [nedge, num_heads, head_dim]
         q = q.transpose(0, 1) # [num_heads, nedge, head_dim]
         k = k.transpose(0, 1) # [num_heads, nedge, head_dim]
         v = v.transpose(0, 1) # [num_heads, nedge, head_dim]

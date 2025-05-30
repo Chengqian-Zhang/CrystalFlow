@@ -28,12 +28,13 @@ def parse_logs(log_text):
     return metrics
 
 # plot loss curve
-def plot_losses(metrics, run_path, expname):
+def plot_losses(metrics, run_path, expname, valid=False):
     
     # compare training and validation loss
     plt.subplot(2, 2, 1)
     plot_metric(metrics, 'train_loss_epoch', f'training loss {expname}')
-    plot_metric(metrics, 'val_loss', f'validation loss {expname}')
+    if valid:
+        plot_metric(metrics, 'val_loss', f'validation loss {expname}')
     plt.yscale('log')
     plt.xscale('log')
     plt.title('Total Loss')
@@ -41,7 +42,8 @@ def plot_losses(metrics, run_path, expname):
     # lattice loss
     plt.subplot(2, 2, 2)
     plot_metric(metrics, 'lattice_loss_epoch', f'train lattice {expname}')
-    plot_metric(metrics, 'val_lattice_loss', f'val lattice {expname}')
+    if valid:
+        plot_metric(metrics, 'val_lattice_loss', f'val lattice {expname}')
     plt.yscale('log')
     plt.xscale('log')
     plt.title('Lattice Loss')
@@ -49,7 +51,8 @@ def plot_losses(metrics, run_path, expname):
     # coord loss
     plt.subplot(2, 2, 3)
     plot_metric(metrics, 'coord_loss_epoch', f'train coord {expname}')
-    plot_metric(metrics, 'val_coord_loss', f'val coord {expname}')
+    if valid:
+        plot_metric(metrics, 'val_coord_loss', f'val coord {expname}')
     plt.yscale('log')
     plt.xscale('log')
     plt.title('Coordinate Loss')
@@ -69,7 +72,7 @@ for expname in sys.argv[1:]:
     log_file = os.path.join(run_path, "run.metrics.log")
     with open(log_file) as f:
         log_data = parse_logs(f.read())
-    plot_losses(log_data,run_path,expname)
+    plot_losses(log_data,run_path,expname,valid=False)
 
 plt.tight_layout()
 plt.savefig(f'hydra/training_metrics.png', dpi=300)
