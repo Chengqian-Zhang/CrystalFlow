@@ -72,7 +72,7 @@ for expname in sys.argv[1:]:
     log_file = os.path.join(run_path, "run.metrics.log")
     with open(log_file) as f:
         log_data = parse_logs(f.read())
-    plot_losses(log_data,run_path,expname,valid=False)
+    plot_losses(log_data,run_path,expname,valid=True)
 
 plt.tight_layout()
 plt.savefig(f'hydra/training_metrics.png', dpi=300)
