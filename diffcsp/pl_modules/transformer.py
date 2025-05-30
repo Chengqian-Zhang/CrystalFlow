@@ -205,6 +205,7 @@ class CSPLayer(nn.Module):
         #node_output = self.attention(node_features, frac_coords, lattices_rep, edge_index, edge2graph, num_atoms, frac_diff, lattices_mat)
         #return node_input + node_output
 
+        '''
         # multi-head attention
         attention_output = self.attention(node_features, frac_coords, lattices_rep, edge_index, edge2graph, num_atoms, frac_diff, lattices_mat)
         # Add
@@ -221,6 +222,12 @@ class CSPLayer(nn.Module):
             node_features = self.feed_forward_layer_norm(node_features)
 
         return node_features
+        '''
+        node_input = node_features
+        if self.ln:
+            node_features = self.layer_norm(node_input)
+        node_output = self.attention(node_features, frac_coords, lattices_rep, edge_index, edge2graph, num_atoms, frac_diff, lattices_mat)
+        return node_input + node_output
 
 
 class CSPNet(nn.Module):
@@ -517,9 +524,8 @@ class CSPNet(nn.Module):
                 lattices_mat=lattices_mat,
             )
 
-        #if self.ln:
-        #    node_features = self.final_layer_norm(node_features)
-        # We have layer_norm in attention layer, no need to norm the output
+        if self.ln:
+            node_features = self.final_layer_norm(node_features)
 
         coord_out = self.coord_out(node_features)
 
