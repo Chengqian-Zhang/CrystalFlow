@@ -1,5 +1,6 @@
-_target_: diffcsp.pl_modules.cspnet.CSPNet
+_target_: diffcsp.pl_modules.transformer.CSPNet
 hidden_dim: 512
+num_heads: 8
 latent_dim: 0
 lattice_dim: 9
 max_atoms: 100
