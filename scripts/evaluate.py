@@ -135,7 +135,7 @@ if __name__ == '__main__':
     guidance_group = parser.add_argument_group('guidance')
     guidance_group.add_argument('--guide-factor', type=float, help='guidance factor (default: None)')
     guidance_group.add_argument('--gnet', type=str, default=None, help='path to the guidance network')
-    guidance_group.add_argument('--gnet_weight', type=int, default=1, help='guidance weight of the guidance network')
+    guidance_group.add_argument('--gnet_weight', type=float, default=1.0, help='guidance weight of the guidance network')
 
     args = parser.parse_args()
     main(args)
