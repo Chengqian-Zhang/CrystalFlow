@@ -542,6 +542,7 @@ class CSPFlow(BaseModule):
         anneal_lattice=False, anneal_coords=False, anneal_type=False,
         anneal_slope=0.0, anneal_offset=0.0,
         guide_factor=None,
+        gnet_call=None,
         **kwargs,
     ):
         """
@@ -677,6 +678,35 @@ class CSPFlow(BaseModule):
                     pred_l, pred_f, pred_t = pred
                 else:
                     pred_l, pred_f = pred
+                if kwargs.get("gnet",None) is not None:
+                    assert gnet_call is not None
+                    gnet_weight = kwargs.get("gnet_weight", 1)
+                    gpred = gnet_call(
+                        t=time_emb,
+                        dt=dt_query_emb,
+                        atom_types=t_t,
+                        frac_coords=f_t,
+                        lattices_rep=l_t,
+                        num_atoms=batch.num_atoms,
+                        node2graph=batch.batch,
+                        lattices_mat=lattices_mat_t,
+                        cemb=None, guide_indicator=None,
+                    )
+                    gpred = self.post_decoder_on_sample(
+                        gpred,
+                        batch=batch, t=t_stamp,
+                        anneal_lattice=anneal_lattice, anneal_coords=anneal_coords, anneal_type=anneal_type,
+                        anneal_slope=anneal_slope, anneal_offset=anneal_offset,
+                    )
+                    if self.pred_type:
+                        gpred_l, gpred_f, gpred_t = gpred
+                        pred_l = torch.lerp(gpred_l, pred_l, gnet_weight)
+                        pred_f = torch.lerp(gpred_f, pred_f, gnet_weight)
+                        pred_t = torch.lerp(gpred_t, pred_t, gnet_weight)
+                    else:
+                        gpred_l, gpred_f = gpred
+                        pred_l = torch.lerp(gpred_l, pred_l, gnet_weight)
+                        pred_f = torch.lerp(gpred_f, pred_f, gnet_weight)
 
             if guide_factor is not None:
                 pred = self.decoder(

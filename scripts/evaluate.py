@@ -23,6 +23,12 @@ import numpy as np
 
 
 def diffusion(loader, model, num_evals, **sample_kwargs):
+    if sample_kwargs.get("gnet", None) is not None:
+        gnet = sample_kwargs["gnet"]
+        gmodel, _, _ = load_model(Path(gnet), load_data=False)
+        gnet_call = gmodel.decoder
+    else:
+        gnet_call = None
     frac_coords = []
     num_atoms = []
     atom_types = []
@@ -39,7 +45,7 @@ def diffusion(loader, model, num_evals, **sample_kwargs):
         for eval_idx in range(num_evals):
 
             print(f'batch {idx} / {len(loader)}, sample {eval_idx} / {num_evals}')
-            outputs, traj = model.sample(batch, **sample_kwargs)
+            outputs, traj = model.sample(batch, gnet_call=gnet_call, **sample_kwargs)
             batch_frac_coords.append(outputs['frac_coords'].detach().cpu())
             batch_num_atoms.append(outputs['num_atoms'].detach().cpu())
             batch_atom_types.append(outputs['atom_types'].detach().cpu())
@@ -87,7 +93,7 @@ def main(args):
         test_loader, model, num_evals=args.num_evals,
         step_lr=step_lr, N=args.ode_int_steps,
         anneal_lattice=args.anneal_lattice, anneal_coords=args.anneal_coords, anneal_type=args.anneal_type, anneal_slope=args.anneal_slope, anneal_offset=args.anneal_offset,
-        guide_factor=args.guide_factor,
+        guide_factor=args.guide_factor, gnet=args.gnet, gnet_weight=args.gnet_weight,
     )
 
     if args.label == '':
@@ -128,6 +134,8 @@ if __name__ == '__main__':
 
     guidance_group = parser.add_argument_group('guidance')
     guidance_group.add_argument('--guide-factor', type=float, help='guidance factor (default: None)')
+    guidance_group.add_argument('--gnet', type=str, default=None, help='path to the guidance network')
+    guidance_group.add_argument('--gnet_weight', type=int, default=1, help='guidance weight of the guidance network')
 
     args = parser.parse_args()
     main(args)

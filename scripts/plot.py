@@ -70,12 +70,14 @@ def plot_metric(metrics, key, label, **style):
 
 plt.figure(figsize=(12, 8))
 num_exp = len(sys.argv) - 1
-for expname in sys.argv[1:]:
+plot_valid = sys.argv[-1]
+plot_train = sys.argv[-2]
+for expname in sys.argv[1:-2]:
     run_path = os.path.join(PROJECT_ROOT, "hydra/singlerun", expname)
     log_file = os.path.join(run_path, "run.metrics.log")
     with open(log_file) as f:
         log_data = parse_logs(f.read())
-    plot_losses(log_data,run_path,expname,valid=True, train=False)
+    plot_losses(log_data,run_path,expname,valid=plot_valid, train=plot_train)
 
 plt.tight_layout()
 plt.savefig(f'hydra/training_metrics.png', dpi=300)
