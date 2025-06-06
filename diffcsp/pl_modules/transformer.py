@@ -205,20 +205,22 @@ class CSPLayer(nn.Module):
         #node_output = self.attention(node_features, frac_coords, lattices_rep, edge_index, edge2graph, num_atoms, frac_diff, lattices_mat)
         #return node_input + node_output
 
+        # pre-layernorm
+        node_features_attn = node_features
+        if self.ln:
+            node_features_attn = self.attention_layer_norm(node_features_attn)
         # multi-head attention
-        attention_output = self.attention(node_features, frac_coords, lattices_rep, edge_index, edge2graph, num_atoms, frac_diff, lattices_mat)
+        attention_output = self.attention(node_features_attn, frac_coords, lattices_rep, edge_index, edge2graph, num_atoms, frac_diff, lattices_mat)
         # Add
         node_features = node_features + attention_output
-        # Norm
+        # pre-layernorm
+        node_features_ffn = node_features
         if self.ln:
-            node_features = self.attention_layer_norm(node_features)
+            node_features_ffn = self.feed_forward_layer_norm(node_features_ffn)
         # Feed-Forward
-        feed_forward_output = self.feed_forward(node_features)
+        feed_forward_output = self.feed_forward(node_features_ffn)
         # Add
         node_features = node_features + feed_forward_output
-        # Norm
-        if self.ln:
-            node_features = self.feed_forward_layer_norm(node_features)
 
         return node_features
 
