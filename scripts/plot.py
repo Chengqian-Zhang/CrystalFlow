@@ -68,10 +68,10 @@ def plot_metric(metrics, key, label, **style):
         plt.ylabel('Loss')
         plt.legend()
 
-plt.figure(figsize=(12, 8))
+plt.figure(figsize=(14, 7))
 num_exp = len(sys.argv) - 1
-plot_valid = sys.argv[-1]
-plot_train = sys.argv[-2]
+plot_valid = True if "true" in sys.argv[-1] else False
+plot_train = True if "true" in sys.argv[-2] else False
 for expname in sys.argv[1:-2]:
     run_path = os.path.join(PROJECT_ROOT, "hydra/singlerun", expname)
     log_file = os.path.join(run_path, "run.metrics.log")
