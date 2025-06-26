@@ -112,6 +112,20 @@ types:
     fc_num_layers: 5
     n_out: 128
 
+  tc:
+    _target_: diffcsp.pl_modules.conditioning.ScalarEmbedding
+    prop_name: tc
+    batch_norm: false
+    no_expansion: false
+    n_basis: 50
+    start: -2
+    stop: 2
+    trainable_gaussians: false
+    no_mlp: true
+    hidden_dim: 128
+    fc_num_layers: 5
+    n_out: 128
+
   # [1, 230] -> [-1, 1], (n - 115.5) / 115
   spgno:
     _target_: diffcsp.pl_modules.conditioning.ScalarEmbedding

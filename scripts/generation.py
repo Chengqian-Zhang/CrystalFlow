@@ -22,6 +22,7 @@ from pyxtal.symmetry import Group
 import chemparse
 import numpy as np
 from p_tqdm import p_map
+from IPython import embed
 
 import pdb
 
@@ -144,8 +145,8 @@ train_dist = {
             0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,
             0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,
             0.0,0.0,0.0,0.0,0.0,2.7844015597103775e-07,
-    ]
-
+    ],
+    "AM_7k": [0, 0.00145402, 0.01902339, 0.07597237, 0.53919787, 0.1388586, 0.12189507, 0.01357082, 0.08336363, 0.00072701, 0.00496789, 0., 0.00096934]
 }
 
 
@@ -216,6 +217,7 @@ def parse_conditions(cond_string: str | None) -> dict:
         else:
             val = float(val)
         conditions[key] = val
+    print(f"conditions: {conditions}")
     return conditions
 
 
@@ -234,6 +236,7 @@ def main(args):
                 conditions[k] = v
     else:
         conditions = {}
+    print(conditions)
 
     if torch.cuda.is_available():
         model.to('cuda')
