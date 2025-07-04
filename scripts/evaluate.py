@@ -93,7 +93,7 @@ def main(args):
         test_loader, model, num_evals=args.num_evals,
         step_lr=step_lr, N=args.ode_int_steps,
         anneal_lattice=args.anneal_lattice, anneal_coords=args.anneal_coords, anneal_type=args.anneal_type, anneal_slope=args.anneal_slope, anneal_offset=args.anneal_offset,
-        guide_factor=args.guide_factor, gnet=args.gnet, gnet_weight=args.gnet_weight,
+        guide_factor=args.guide_factor, gnet=args.gnet, gnet_weight=args.gnet_weight,runge_kutta=args.runge_kutta, rk_method=args.rk_method,
     )
 
     if args.label == '':
@@ -124,6 +124,8 @@ if __name__ == '__main__':
     step_group.add_argument('--dataset', help='load default step_lr of which dataset; effect when step_lr is -1')
     step_group.add_argument('--step_lr', default=-1, type=float, help="Step interval for ODE/SDE, -1 for SDE dataset defaults.")
     step_group.add_argument('-N', '--ode-int-steps', metavar='N', default=None, type=int, help="ODE integrate steps number; overwrite step_lr (default: None)")
+    step_group.add_argument('--runge_kutta', default=False, type=bool, help="If using Runge-Kutta method to integrate.")
+    step_group.add_argument('--rk_method', default="xxxx", type=str, help="The Runge-Kutta method used to integrate, it can be midpoint, modified_euler, order_four")
 
     anneal_group = parser.add_argument_group('annealing')
     anneal_group.add_argument('--anneal_lattice', action="store_true", help="Anneal lattice.")

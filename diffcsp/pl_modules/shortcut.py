@@ -543,6 +543,8 @@ class CSPFlow(BaseModule):
         anneal_slope=0.0, anneal_offset=0.0,
         guide_factor=None,
         gnet_call=None,
+        runge_kutta=False,
+        rk_method="xxxx",
         **kwargs,
     ):
         """
@@ -657,31 +659,360 @@ class CSPFlow(BaseModule):
                 if self.pred_type:
                     pred_t = 0.0
             else:
-                pred = self.decoder(
-                    t=time_emb,
-                    dt=dt_query_emb,
-                    atom_types=t_t,
-                    frac_coords=f_t,
-                    lattices_rep=l_t,
-                    num_atoms=batch.num_atoms,
-                    node2graph=batch.batch,
-                    lattices_mat=lattices_mat_t,
-                    cemb=None, guide_indicator=None,
-                )
-                pred = self.post_decoder_on_sample(
-                    pred,
-                    batch=batch, t=t_stamp,
-                    anneal_lattice=anneal_lattice, anneal_coords=anneal_coords, anneal_type=anneal_type,
-                    anneal_slope=anneal_slope, anneal_offset=anneal_offset,
-                )
-                if self.pred_type:
-                    pred_l, pred_f, pred_t = pred
+                if runge_kutta:
+                    if rk_method == "midpoint":
+                        half_dt = torch.full((batch_size,), step_lr/2, device=self.device)
+                        half_dt_emb = self.time_embedding(half_dt)
+                        k1_pred = self.decoder(
+                            t=time_emb,
+                            dt=half_dt_emb,
+                            atom_types=t_t,
+                            frac_coords=f_t,
+                            lattices_rep=l_t,
+                            num_atoms=batch.num_atoms,
+                            node2graph=batch.batch,
+                            lattices_mat=lattices_mat_t,
+                            cemb=None, guide_indicator=None,
+                        )
+                        k1_pred = self.post_decoder_on_sample(
+                            k1_pred,
+                            batch=batch, t=t_stamp,
+                            anneal_lattice=anneal_lattice, anneal_coords=anneal_coords, anneal_type=anneal_type,
+                            anneal_slope=anneal_slope, anneal_offset=anneal_offset,
+                        )
+                        if self.pred_type:
+                            k1_pred_l, k1_pred_f, k1_pred_t = k1_pred
+                        else:
+                            k1_pred_l, k1_pred_f = k1_pred
+
+                        # the second half step
+                        l_temp = l_t + k1_pred_l * (step_lr / 2)
+                        f_temp = f_t + k1_pred_f * (step_lr / 2)
+                        f_temp = f_temp % 1.0
+                        if self.pred_type:
+                            t_temp = t_t + k1_pred_t * (step_lr / 2)
+                        else:
+                            t_temp = t_t
+                        if self.lattice_polar:
+                            lattices_mat_temp = lattice_polar_build_torch(l_temp)
+                        else:
+                            lattices_mat_temp = l_temp
+
+                        t_half_stamp = t_stamp + (step_lr / 2)
+                        times_half = torch.full((batch_size,), t_half_stamp, device=self.device)
+                        time_half_emb = self.time_embedding(times_half)
+                        k2_pred = self.decoder(
+                            t=time_half_emb,
+                            dt=half_dt_emb,
+                            atom_types=t_temp,
+                            frac_coords=f_temp,
+                            lattices_rep=l_temp,
+                            num_atoms=batch.num_atoms,
+                            node2graph=batch.batch,
+                            lattices_mat=lattices_mat_temp,
+                            cemb=None, guide_indicator=None,
+                        )
+                        k2_pred = self.post_decoder_on_sample(
+                            k2_pred,
+                            batch=batch, t=t_half_stamp,
+                            anneal_lattice=anneal_lattice, anneal_coords=anneal_coords, anneal_type=anneal_type,
+                            anneal_slope=anneal_slope, anneal_offset=anneal_offset,
+                        )
+                        if self.pred_type:
+                            k2_pred_l, k2_pred_f, k2_pred_t = k2_pred
+                        else:
+                            k2_pred_l, k2_pred_f = k2_pred
+
+                        pred_l = k2_pred_l
+                        pred_f = k2_pred_f
+                        if self.pred_type:
+                            pref_t = k2_pred_t
+                    elif rk_method == "modified_euler":
+                        interval_dt = torch.full((batch_size,), step_lr, device=self.device)
+                        interval_dt_emb = self.time_embedding(interval_dt)
+                        k1_pred = self.decoder(
+                            t=time_emb,
+                            dt=interval_dt_emb,
+                            atom_types=t_t,
+                            frac_coords=f_t,
+                            lattices_rep=l_t,
+                            num_atoms=batch.num_atoms,
+                            node2graph=batch.batch,
+                            lattices_mat=lattices_mat_t,
+                            cemb=None, guide_indicator=None,
+                        )
+                        k1_pred = self.post_decoder_on_sample(
+                            k1_pred,
+                            batch=batch, t=t_stamp,
+                            anneal_lattice=anneal_lattice, anneal_coords=anneal_coords, anneal_type=anneal_type,
+                            anneal_slope=anneal_slope, anneal_offset=anneal_offset,
+                        )
+                        if self.pred_type:
+                            k1_pred_l, k1_pred_f, k1_pred_t = k1_pred
+                        else:
+                            k1_pred_l, k1_pred_f = k1_pred
+
+                        # the second step
+                        l_temp = l_t + k1_pred_l * step_lr
+                        f_temp = f_t + k1_pred_f * step_lr
+                        f_temp = f_temp % 1.0
+                        if self.pred_type:
+                            t_temp = t_t + k1_pred_t * step_lr
+                        else:
+                            t_temp = t_t
+                        if self.lattice_polar:
+                            lattices_mat_temp = lattice_polar_build_torch(l_temp)
+                        else:
+                            lattices_mat_temp = l_temp
+
+                        t_interval_stamp = t_stamp + step_lr
+                        times_interval = torch.full((batch_size,), t_interval_stamp, device=self.device)
+                        time_interval_emb = self.time_embedding(times_interval)
+                        zero_dt = torch.full((batch_size,), 0.0 , device=self.device)
+                        zero_dt_emb = self.time_embedding(zero_dt)
+                        k2_pred = self.decoder(
+                            t=time_interval_emb,
+                            dt=zero_dt_emb,
+                            atom_types=t_temp,
+                            frac_coords=f_temp,
+                            lattices_rep=l_temp,
+                            num_atoms=batch.num_atoms,
+                            node2graph=batch.batch,
+                            lattices_mat=lattices_mat_temp,
+                            cemb=None, guide_indicator=None,
+                        )
+                        k2_pred = self.post_decoder_on_sample(
+                            k2_pred,
+                            batch=batch, t=t_interval_stamp,
+                            anneal_lattice=anneal_lattice, anneal_coords=anneal_coords, anneal_type=anneal_type,
+                            anneal_slope=anneal_slope, anneal_offset=anneal_offset,
+                        )
+                        if self.pred_type:
+                            k2_pred_l, k2_pred_f, k2_pred_t = k2_pred
+                        else:
+                            k2_pred_l, k2_pred_f = k2_pred
+
+                        pred_l = (k1_pred_l + k2_pred_l)/2
+                        pred_f = (k1_pred_f + k2_pred_f)/2
+                        if self.pred_type:
+                            pref_t = (k1_pred_t + k2_pred_t)/2
+
+                    elif rk_method == "order_four":
+                        half_dt = torch.full((batch_size,), step_lr/2, device=self.device)
+                        half_dt_emb = self.time_embedding(half_dt)
+                        k1_pred = self.decoder(
+                            t=time_emb,
+                            dt=half_dt_emb,
+                            atom_types=t_t,
+                            frac_coords=f_t,
+                            lattices_rep=l_t,
+                            num_atoms=batch.num_atoms,
+                            node2graph=batch.batch,
+                            lattices_mat=lattices_mat_t,
+                            cemb=None, guide_indicator=None,
+                        )
+                        k1_pred = self.post_decoder_on_sample(
+                            k1_pred,
+                            batch=batch, t=t_stamp,
+                            anneal_lattice=anneal_lattice, anneal_coords=anneal_coords, anneal_type=anneal_type,
+                            anneal_slope=anneal_slope, anneal_offset=anneal_offset,
+                        )
+                        if self.pred_type:
+                            k1_pred_l, k1_pred_f, k1_pred_t = k1_pred
+                        else:
+                            k1_pred_l, k1_pred_f = k1_pred
+
+                        # the second half step
+                        l_k2 = l_t + k1_pred_l * (step_lr / 2)
+                        f_k2 = f_t + k1_pred_f * (step_lr / 2)
+                        f_k2 = f_k2 % 1.0
+                        if self.pred_type:
+                            t_k2 = t_t + k1_pred_t * (step_lr / 2)
+                        else:
+                            t_k2 = t_t
+                        if self.lattice_polar:
+                            lattices_mat_k2 = lattice_polar_build_torch(l_k2)
+                        else:
+                            lattices_mat_k2 = l_k2
+
+                        t_half_stamp = t_stamp + (step_lr / 2)
+                        times_half = torch.full((batch_size,), t_half_stamp, device=self.device)
+                        time_half_emb = self.time_embedding(times_half)
+                        k2_pred = self.decoder(
+                            t=time_half_emb,
+                            dt=half_dt_emb,
+                            atom_types=t_k2,
+                            frac_coords=f_k2,
+                            lattices_rep=l_k2,
+                            num_atoms=batch.num_atoms,
+                            node2graph=batch.batch,
+                            lattices_mat=lattices_mat_k2,
+                            cemb=None, guide_indicator=None,
+                        )
+                        k2_pred = self.post_decoder_on_sample(
+                            k2_pred,
+                            batch=batch, t=t_half_stamp,
+                            anneal_lattice=anneal_lattice, anneal_coords=anneal_coords, anneal_type=anneal_type,
+                            anneal_slope=anneal_slope, anneal_offset=anneal_offset,
+                        )
+                        if self.pred_type:
+                            k2_pred_l, k2_pred_f, k2_pred_t = k2_pred
+                        else:
+                            k2_pred_l, k2_pred_f = k2_pred
+
+                        # the third step
+                        l_k3 = l_t + k2_pred_l * (step_lr / 2)
+                        f_k3 = f_t + k2_pred_f * (step_lr / 2)
+                        f_k3 = f_k3 % 1.0
+                        if self.pred_type:
+                            t_k3 = t_t + k2_pred_t * (step_lr / 2)
+                        else:
+                            t_k3 = t_t
+                        if self.lattice_polar:
+                            lattices_mat_k3 = lattice_polar_build_torch(l_k3)
+                        else:
+                            lattices_mat_k3 = l_k3
+                        k3_pred = self.decoder(
+                            t=time_half_emb,
+                            dt=half_dt_emb,
+                            atom_types=t_k3,
+                            frac_coords=f_k3,
+                            lattices_rep=l_k3,
+                            num_atoms=batch.num_atoms,
+                            node2graph=batch.batch,
+                            lattices_mat=lattices_mat_k3,
+                            cemb=None, guide_indicator=None,
+                        )
+                        k3_pred = self.post_decoder_on_sample(
+                            k3_pred,
+                            batch=batch, t=t_half_stamp,
+                            anneal_lattice=anneal_lattice, anneal_coords=anneal_coords, anneal_type=anneal_type,
+                            anneal_slope=anneal_slope, anneal_offset=anneal_offset,
+                        )
+                        if self.pred_type:
+                            k3_pred_l, k3_pred_f, k3_pred_t = k3_pred
+                        else:
+                            k3_pred_l, k3_pred_f = k3_pred
+                        
+                        # the fourth step
+                        l_k4 = l_t + k3_pred_l * step_lr
+                        f_k4 = f_t + k3_pred_f * step_lr
+                        f_k4 = f_k4 % 1.0
+                        if self.pred_type:
+                            t_k4 = t_t + k3_pred_t * step_lr
+                        else:
+                            t_k4 = t_t
+                        if self.lattice_polar:
+                            lattices_mat_k4 = lattice_polar_build_torch(l_k4)
+                        else:
+                            lattices_mat_k4 = l_k4
+
+                        t_interval_stamp = t_stamp + step_lr
+                        times_interval = torch.full((batch_size,), t_interval_stamp, device=self.device)
+                        time_interval_emb = self.time_embedding(times_interval)
+                        zero_dt = torch.full((batch_size,), 0.0 , device=self.device)
+                        zero_dt_emb = self.time_embedding(zero_dt)
+
+                        k4_pred = self.decoder(
+                            t=time_interval_emb,
+                            dt=zero_dt_emb,
+                            atom_types=t_k4,
+                            frac_coords=f_k4,
+                            lattices_rep=l_k4,
+                            num_atoms=batch.num_atoms,
+                            node2graph=batch.batch,
+                            lattices_mat=lattices_mat_k4,
+                            cemb=None, guide_indicator=None,
+                        )
+                        k4_pred = self.post_decoder_on_sample(
+                            k4_pred,
+                            batch=batch, t=t_interval_stamp,
+                            anneal_lattice=anneal_lattice, anneal_coords=anneal_coords, anneal_type=anneal_type,
+                            anneal_slope=anneal_slope, anneal_offset=anneal_offset,
+                        )
+                        if self.pred_type:
+                            k4_pred_l, k4_pred_f, k4_pred_t = k4_pred
+                        else:
+                            k4_pred_l, k4_pred_f = k4_pred
+
+                        pred_l = (k1_pred_l + 2*k2_pred_l + 2*k3_pred_l + k4_pred_l)/6
+                        pred_f = (k1_pred_f + 2*k2_pred_f + 2*k3_pred_f + k4_pred_f)/6
+                        if self.pred_type:
+                            pref_t = (k1_pred_t + 2*k2_pred_t + 2*k3_pred_t + k4_pred_t)/6
+                    else:
+                        raise RuntimeError(f"Unknown runge-kutta method {rk_method}")
+                    '''
+                    # the first half step
+                    half_dt = torch.full((batch_size,), step_lr/2, device=self.device)
+                    half_dt_emb = self.time_embedding(half_dt)
+                    k1_pred = self.decoder(
+                        t=time_emb,
+                        dt=half_dt_emb,
+                        atom_types=t_t,
+                        frac_coords=f_t,
+                        lattices_rep=l_t,
+                        num_atoms=batch.num_atoms,
+                        node2graph=batch.batch,
+                        lattices_mat=lattices_mat_t,
+                        cemb=None, guide_indicator=None,
+                    )
+                    k1_pred = self.post_decoder_on_sample(
+                        k1_pred,
+                        batch=batch, t=t_stamp,
+                        anneal_lattice=anneal_lattice, anneal_coords=anneal_coords, anneal_type=anneal_type,
+                        anneal_slope=anneal_slope, anneal_offset=anneal_offset,
+                    )
+                    if self.pred_type:
+                        raise NotImplementedError
+                        k1_pred_l, k1_pred_f, k1_pred_t = k1_pred
+                    else:
+                        k1_pred_l, k1_pred_f = k1_pred
+                    # the second half step
+                    l_temp = l_t + k1_pred_l * (step_lr / 2)
+                    f_temp = f_t + k1_pred_f * (step_lr / 2)
+                    f_temp = f_temp % 1.0
+                    if self.pred_type:
+                        raise NotImplementedError
+                        t_temp = t_t + k1_pred_t * (step_lr / 2)
+                    else:
+                        t_temp = t_t
+
+                    t_half_stamp = t_stamp + (step_lr / 2)
+                    times_half = torch.full((batch_size,), t_half_stamp, device=self.device)
+                    time_half_emb = self.time_embedding(times_half)
+                    k2_pred = self.decoder(
+                        t=time_half_emb,
+                        dt=half_dt_emb,
+                        atom_types=t_temp,
+                        frac_coords=f_temp,
+                        lattices_rep=l_temp,
+                        num_atoms=batch.num_atoms,
+                        node2graph=batch.batch,
+                        lattices_mat=lattices_mat_t, # !!!!
+                        cemb=None, guide_indicator=None,
+                    )
+                    k2_pred = self.post_decoder_on_sample(
+                        k2_pred,
+                        batch=batch, t=t_half_stamp,
+                        anneal_lattice=anneal_lattice, anneal_coords=anneal_coords, anneal_type=anneal_type,
+                        anneal_slope=anneal_slope, anneal_offset=anneal_offset,
+                    )
+                    if self.pred_type:
+                        raise NotImplementedError
+                        k2_pred_l, k2_pred_f, k2_pred_t = k2_pred
+                    else:
+                        k2_pred_l, k2_pred_f = k2_pred
+                    update_l = (k1_pred_l + k2_pred_l)/2
+                    update_f = (k1_pred_f + k2_pred_f)/2
+                    if self.pred_type:
+                        update_t = (k1_pred_t + k2_pred_t)/2
+                    pred_l = update_l
+                    pred_f = update_f
+                    #pred_t = update_t
+                    '''
+
                 else:
-                    pred_l, pred_f = pred
-                if kwargs.get("gnet",None) is not None:
-                    assert gnet_call is not None
-                    gnet_weight = kwargs.get("gnet_weight", 1)
-                    gpred = gnet_call(
+                    pred = self.decoder(
                         t=time_emb,
                         dt=dt_query_emb,
                         atom_types=t_t,
@@ -692,21 +1023,45 @@ class CSPFlow(BaseModule):
                         lattices_mat=lattices_mat_t,
                         cemb=None, guide_indicator=None,
                     )
-                    gpred = self.post_decoder_on_sample(
-                        gpred,
+                    pred = self.post_decoder_on_sample(
+                        pred,
                         batch=batch, t=t_stamp,
                         anneal_lattice=anneal_lattice, anneal_coords=anneal_coords, anneal_type=anneal_type,
                         anneal_slope=anneal_slope, anneal_offset=anneal_offset,
                     )
                     if self.pred_type:
-                        gpred_l, gpred_f, gpred_t = gpred
-                        pred_l = torch.lerp(gpred_l, pred_l, gnet_weight)
-                        pred_f = torch.lerp(gpred_f, pred_f, gnet_weight)
-                        pred_t = torch.lerp(gpred_t, pred_t, gnet_weight)
+                        pred_l, pred_f, pred_t = pred
                     else:
-                        gpred_l, gpred_f = gpred
-                        pred_l = torch.lerp(gpred_l, pred_l, gnet_weight)
-                        pred_f = torch.lerp(gpred_f, pred_f, gnet_weight)
+                        pred_l, pred_f = pred
+                    if kwargs.get("gnet",None) is not None:
+                        assert gnet_call is not None
+                        gnet_weight = kwargs.get("gnet_weight", 1)
+                        gpred = gnet_call(
+                            t=time_emb,
+                            dt=dt_query_emb,
+                            atom_types=t_t,
+                            frac_coords=f_t,
+                            lattices_rep=l_t,
+                            num_atoms=batch.num_atoms,
+                            node2graph=batch.batch,
+                            lattices_mat=lattices_mat_t,
+                            cemb=None, guide_indicator=None,
+                        )
+                        gpred = self.post_decoder_on_sample(
+                            gpred,
+                            batch=batch, t=t_stamp,
+                            anneal_lattice=anneal_lattice, anneal_coords=anneal_coords, anneal_type=anneal_type,
+                            anneal_slope=anneal_slope, anneal_offset=anneal_offset,
+                        )
+                        if self.pred_type:
+                            gpred_l, gpred_f, gpred_t = gpred
+                            pred_l = torch.lerp(gpred_l, pred_l, gnet_weight)
+                            pred_f = torch.lerp(gpred_f, pred_f, gnet_weight)
+                            pred_t = torch.lerp(gpred_t, pred_t, gnet_weight)
+                        else:
+                            gpred_l, gpred_f = gpred
+                            pred_l = torch.lerp(gpred_l, pred_l, gnet_weight)
+                            pred_f = torch.lerp(gpred_f, pred_f, gnet_weight)
 
             if guide_factor is not None:
                 pred = self.decoder(
