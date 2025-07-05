@@ -334,8 +334,14 @@ class CSPFlow(BaseModule):
         t2_emb = self.time_embedding(t2)
 
         if self.pred_type:
-            raise RuntimeError("Not implemented")
+            input_atom_types_t2 = input_atom_types + dt_bootstrap.repeat_interleave(batch.num_atoms[:bootstrap_batchsize])[:, None] * vb1_t
+            input_frac_coords_t2 = input_frac_coords + dt_bootstrap.repeat_interleave(batch.num_atoms[:bootstrap_batchsize])[:, None] * vb1_f
+            #input_frac_coords_t2 = torch.clamp(input_frac_coords_t2, -4, 4)
+            input_lattice_rep_t2 = input_lattice_rep + dt_bootstrap[:, None] * vb1_l
+            #input_lattice_rep_t2 = torch.clamp(input_lattice_rep_t2, -4, 4)
+            lattices_mat_t2 = lattice_polar_build_torch(input_lattice_rep_t2)
         else:
+            input_atom_types_t2 = input_atom_types
             input_frac_coords_t2 = input_frac_coords + dt_bootstrap.repeat_interleave(batch.num_atoms[:bootstrap_batchsize])[:, None] * vb1_f
             #input_frac_coords_t2 = torch.clamp(input_frac_coords_t2, -4, 4)
             input_lattice_rep_t2 = input_lattice_rep + dt_bootstrap[:, None] * vb1_l
@@ -345,7 +351,7 @@ class CSPFlow(BaseModule):
         vb2 = self.decoder(
             t=t2_emb,
             dt=dt_bootstrap_emb,
-            atom_types=input_atom_types,
+            atom_types=input_atom_types_t2,
             frac_coords=input_frac_coords_t2,
             lattices_rep=input_lattice_rep_t2,
             num_atoms=batch.num_atoms[:bootstrap_batchsize],
@@ -362,11 +368,16 @@ class CSPFlow(BaseModule):
         #v_target_l = torch.clamp(v_target_l, -4, 4)
         v_target_f = (vb1_f + vb2_f)/2
         #v_target_f = torch.clamp(v_target_f, -4, 4)
+        if self.pred_type:
+            v_target_t = (vb1_t + vb2_t)/2
         v_target_l_sg = v_target_l.detach()
         v_target_f_sg = v_target_f.detach()
+        if self.pred_type:
+            v_target_t_sg = v_target_t.detach()
 
         # =========== Generate Flow-Matching Targets ============  
         flow_batchsize = batch_size - bootstrap_batchsize
+        flow_num_nodes = batch.num_nodes - bootstrap_num_nodes
         # Sample t
         if self.time_method == "discrete":
             t_flow = (torch.rand(
@@ -389,7 +400,11 @@ class CSPFlow(BaseModule):
             raise RuntimeError("Not implemented")
 
         if self.pred_type:
-            raise RuntimeError("Not implemented")
+            if self.type_encoding is None:
+                raise RuntimeError("Not implemented")
+            else:
+                gt_atom_types_onehot_flow = self.type_encoding(batch.atom_types[bootstrap_num_nodes:])
+                rd_atom_types_onehot_flow = self.type_encoding.get_rd_encoded_types(flow_num_nodes, device=self.device)
 
         # Build time stamp t
         frac_coords_flow = batch.frac_coords[bootstrap_num_nodes:]
@@ -397,7 +412,7 @@ class CSPFlow(BaseModule):
         tar_l_flow = lattices_rep_T_flow - lattices_rep_0_flow
         tar_f_flow = (frac_coords_flow - f0_flow - 0.5) % 1 - 0.5
         if self.pred_type:
-            raise RuntimeError("Not implemented")
+            tar_t_flow = gt_atom_types_onehot_flow - rd_atom_types_onehot_flow
 
         # Build input lattice rep/mat and input coords
         l_expand_dim_flow = (slice(None),) + (None,) * (tar_l_flow.dim() - 1)
@@ -408,7 +423,8 @@ class CSPFlow(BaseModule):
         else:
             raise RuntimeError("Not implemented")
         if self.pred_type:
-            raise NotImplementedError("pred_type not implemented")
+            input_atom_type_probs_flow = rd_atom_types_onehot_flow + t_flow.repeat_interleave(batch.num_atoms[bootstrap_batchsize:])[:, None] * tar_t_flow
+            input_atom_types_flow = input_atom_type_probs_flow
         else:
             input_atom_types_flow = batch.atom_types[bootstrap_num_nodes:]
 
@@ -431,7 +447,7 @@ class CSPFlow(BaseModule):
         t_flow_emb = self.time_embedding(t_flow)
         dt_flow_emb = self.time_embedding(dt_flow)
 
-        dt_double_emb = self.time_embedding(dt)
+        dt_double_emb = self.time_embedding(dt) # dt = 2 * dt_bootstrap
         
         t_emb_concat  = torch.cat([time_emb, t_flow_emb], dim=0)
         dt_emb_concat = torch.cat([dt_double_emb, dt_flow_emb], dim=0)
@@ -441,6 +457,8 @@ class CSPFlow(BaseModule):
         input_lattice_mat_concat = torch.cat([input_lattice_mat, input_lattice_mat_flow], dim=0)
         label_l = torch.cat([v_target_l_sg, tar_l_flow], dim=0)
         label_f = torch.cat([v_target_f_sg, tar_f_flow], dim=0)
+        if self.pred_type:
+            label_t = torch.cat([v_target_t_sg, tar_t_flow], dim=0)
 
         pred_concat = self.decoder(
             t=t_emb_concat,
@@ -463,8 +481,7 @@ class CSPFlow(BaseModule):
         loss_lattice = F.mse_loss(pred_l, label_l)
         loss_coord = F.mse_loss(pred_f, label_f)
         if self.pred_type:
-            raise NotImplementedError
-            #loss_type = F.mse_loss(pred_t, label_t)
+            loss_type = F.mse_loss(pred_t, label_t)
         else:
             loss_type = 0.0
 
