@@ -60,6 +60,16 @@ def plot_losses(metrics, run_path, expname, valid=False, train=True):
     plt.xscale('log')
     plt.title('Coordinate Loss')
 
+    # type loss
+    plt.subplot(2, 2, 4)
+    if train:
+        plot_metric(metrics, 'type_loss_epoch', f'train type {expname}')
+    if valid:
+        plot_metric(metrics, 'val_type_loss', f'val type {expname}')
+    plt.yscale('log')
+    plt.xscale('log')
+    plt.title('Type Loss')
+
 def plot_metric(metrics, key, label, **style):
     if key in metrics:
         values = [np.mean(epoch_data) for epoch_data in metrics[key]]
