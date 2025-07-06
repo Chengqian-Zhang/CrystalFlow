@@ -519,9 +519,8 @@ class CSPNet(nn.Module):
                 lattices_mat=lattices_mat,
             )
 
-        #if self.ln:
-        #    node_features = self.final_layer_norm(node_features)
-        # We have layer_norm in attention layer, no need to norm the output
+        if self.ln:
+            node_features = self.final_layer_norm(node_features)
 
         coord_out = self.coord_out(node_features)
 
