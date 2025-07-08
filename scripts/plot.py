@@ -11,7 +11,7 @@ from IPython import embed
 def parse_logs(log_text):
     metrics = defaultdict(list)
     
-    for line in log_text.split('\n')[3:-2]:
+    for line in log_text.split('\n')[30:-2]:
         if '[metrics][INFO]' not in line:
             continue
 
@@ -20,7 +20,7 @@ def parse_logs(log_text):
         data = json.loads(json_str)
 
         epoch = data.pop('epoch')
-        if epoch >= len(metrics['epoch']):
+        if (epoch >= len(metrics['epoch'])) and (len(data.keys())==18):
             metrics['epoch'].append(epoch)
             for key in data:
                 metrics[key].append(data[key])
@@ -57,11 +57,10 @@ def plot_losses(metrics, run_path, expname, valid=False, train=True):
     if valid:
         plot_metric(metrics, 'val_coord_loss', f'val coord {expname}')
     plt.yscale('log')
-    plt.ylim((0.03, 0.08))
     plt.xscale('log')
     plt.title('Coordinate Loss')
 
-    # coord loss
+    # type loss
     plt.subplot(2, 2, 4)
     if train:
         plot_metric(metrics, 'type_loss_epoch', f'train type {expname}')
@@ -79,10 +78,10 @@ def plot_metric(metrics, key, label, **style):
         plt.ylabel('Loss')
         plt.legend()
 
-plt.figure(figsize=(12, 8))
+plt.figure(figsize=(14, 7))
 num_exp = len(sys.argv) - 1
-plot_valid = sys.argv[-1]
-plot_train = sys.argv[-2]
+plot_valid = True if "true" in sys.argv[-1] else False
+plot_train = True if "true" in sys.argv[-2] else False
 for expname in sys.argv[1:-2]:
     run_path = os.path.join(PROJECT_ROOT, "hydra/singlerun", expname)
     log_file = os.path.join(run_path, "run.metrics.log")
