@@ -6,12 +6,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from collections import defaultdict
 from IPython import embed
+from tqdm import tqdm
 
 # parser log file
 def parse_logs(log_text):
     metrics = defaultdict(list)
     
-    for line in log_text.split('\n')[3:-2]:
+    for line in tqdm(log_text.split('\n')[3:-2]):
         if '[metrics][INFO]' not in line:
             continue
 
@@ -68,6 +69,7 @@ def plot_losses(metrics, run_path, expname, valid=False, train=True):
         plot_metric(metrics, 'val_type_loss', f'val type {expname}')
     plt.yscale('log')
     plt.xscale('log')
+    plt.ylim((0.04,0.1))
     plt.title('Type Loss')
 
 def plot_metric(metrics, key, label, **style):
