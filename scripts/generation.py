@@ -151,6 +151,18 @@ train_dist = {
                         0.1216735072156759,    0.01363696544419436,   0.08168939494240698,  0.004104329405534225, 0.007943863365550112,
                         0.0006619886137958427, 0.0033099430689792135, 0.0,                  0.0002647954455183371,0.0,
                         0.0,                  0.0,                    0.0,                  0.0,                  0.0005295908910366742
+                        ],
+    "AM_7k_HTSC_2025_iter0": [0.0,
+                              0.00145601, 0.01880008, 0.05443022, 0.05443022, 0.05443022,
+                              0.05443022, 0.05443022, 0.05443022, 0.05443022, 0.05443022,
+                              0.05443022, 0.05443022, 0.05443022, 0.05443022, 0.05443022,
+                              0.05443022, 0.05443022, 0.05443022, 0.05443022, 0.05443022
+                              ],
+    "pbesol_ph_iter0": [0.0,
+                        0.1, 1,  3,  3,  3,
+                        3,   3,  3,  3,  3,
+                        3,   3,  3,  3,  3,
+                        3,   3,  3,  3,  3
                         ]
 }
 
@@ -189,7 +201,12 @@ class SampleDataset(Dataset):
         super().__init__()
         self.total_num = total_num
         self.distribution = train_dist[dataset]
-        self.num_atoms = np.random.choice(len(self.distribution), total_num, p = self.distribution)
+        try:
+            self.num_atoms = np.random.choice(len(self.distribution), total_num, p = self.distribution)
+        except:
+            self.distribution = np.array(self.distribution)
+            self.distribution = (self.distribution/self.distribution.sum()).tolist()
+            self.num_atoms = np.random.choice(len(self.distribution), total_num, p = self.distribution)
         self.is_carbon = dataset == 'carbon_24'
         self.conditions = {k: torch.tensor(v, dtype=torch.float32) if not isinstance(v, torch.Tensor) else v for k, v in conditions.items()}
 
