@@ -275,8 +275,13 @@ class GenEval(object):
                 len(valid_crys), n_samples, replace=False)
             self.valid_samples = [valid_crys[i] for i in sampled_indices]
         else:
-            raise Exception(
-                f'not enough valid crystals in the predicted set: {len(valid_crys)}/{n_samples}')
+            n_samples = len(valid_crys)
+            self.n_samples = n_samples
+            sampled_indices = np.random.choice(
+                len(valid_crys), n_samples, replace=False)
+            self.valid_samples = [valid_crys[i] for i in sampled_indices]
+            #raise Exception(
+            #    f'not enough valid crystals in the predicted set: {len(valid_crys)}/{n_samples}')
 
     def get_validity(self):
         comp_valid = np.array([c.comp_valid for c in self.crys]).mean()

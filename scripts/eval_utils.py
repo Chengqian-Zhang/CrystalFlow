@@ -181,6 +181,9 @@ def smact_validity(comp, count,
                    use_pauling_test=True,
                    include_alloys=True):
     elem_symbols = tuple([chemical_symbols[elem] for elem in comp])
+    for _ele in ["Rf","Db","Sg","Bh","Hs","Mt","Ds","Rg","Cn","Lr","Ra","Nh","Fl","Mc","Lv","Ts","Og"]:
+        if _ele in elem_symbols:
+            return False
     space = smact.element_dictionary(elem_symbols)
     smact_elems = [e[1] for e in space.items()]
     electronegs = [e.pauling_eneg for e in smact_elems]
