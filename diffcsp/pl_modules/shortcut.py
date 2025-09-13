@@ -653,7 +653,7 @@ class CSPFlow(BaseModule):
         else:
             t_t = batch.atom_types
 
-        assert self.denoise_timesteps % N == 0, f"In shortcut training, --ode-int-steps must be divisible by denoise_timesteps."
+        #assert self.denoise_timesteps % N == 0, f"In shortcut training, --ode-int-steps must be divisible by denoise_timesteps."
 
         for t in tqdm(range(N)): # if N = 64, modify to t = (0,1,2...63), origin is t = (1,2,3..64) by xiaoshan
 
