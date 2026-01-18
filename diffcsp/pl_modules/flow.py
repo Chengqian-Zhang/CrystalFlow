@@ -52,6 +52,11 @@ MAX_ATOMIC_NUM = 100
 
 metriclogger = logging.getLogger("metrics")
 
+def mean_flat(x):
+    """
+    Take the mean over all non-batch dimensions.
+    """
+    return torch.mean(x, dim=list(range(1, len(x.size()))))
 
 class BaseModule(pl.LightningModule):
     def __init__(self, *args, **kwargs) -> None:
@@ -97,6 +102,8 @@ class DirectUnsqueezeTime(nn.Module):
 class CSPFlow(BaseModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.repa_models = self.hparams.get("repa_models", None)
 
         if self.hparams.time_dim == 0:
             self.time_dim = 1
@@ -301,9 +308,9 @@ class CSPFlow(BaseModule):
             cemb=cemb, guide_indicator=guide_indicator,
         )
         if self.pred_type:
-            pred_l, pred_f, pred_t = pred
+            pred_l, pred_f, pred_t, zs_tilde = pred
         else:
-            pred_l, pred_f = pred
+            pred_l, pred_f, zs_tilde = pred
 
         loss_sym_l = 0.0
         loss_sym_f = 0.0
@@ -340,6 +347,22 @@ class CSPFlow(BaseModule):
             pred_l = pred_l_symmetrized
             pred_f = pred_f_symmetrized
 
+        # projection loss
+        if zs_tilde is not None:
+            repa = True
+            proj_loss = 0.0
+            assert self.repa_models is not None
+            assert len(self.repa_models) == len(zs_tilde)
+            zs = [batch.dpa3_rep] # hack at this moment
+            for z, z_tilde in zip(zs, zs_tilde):
+                z_tilde = torch.nn.functional.normalize(z_tilde, dim=-1) 
+                z = torch.nn.functional.normalize(z, dim=-1) 
+                proj_loss += mean_flat(-(z * z_tilde).sum(dim=-1))
+            proj_loss /= len(zs)
+        else:
+            repa = False
+            proj_loss = 0.0
+
         loss_lattice = F.mse_loss(pred_l, tar_l)
         loss_coord = F.mse_loss(pred_f, tar_f)
         if self.pred_type:
@@ -350,13 +373,17 @@ class CSPFlow(BaseModule):
         cost_coord = self.hparams.cost_coord
         cost_lattice = 0.0 if lattice_teacher_forcing else self.hparams.cost_lattice
         cost_type    = 0.0 if not self.pred_type      else self.hparams.cost_type
+        cost_repa    = 0.0 if not repa                else self.hparams.cost_repa 
         loss = (
               cost_lattice * loss_lattice
             + cost_coord   * loss_coord
             + cost_type    * loss_type
+            + cost_repa    * proj_loss
             + self.cost_sym_lattice * loss_sym_l
             + self.cost_sym_coord   * loss_sym_f
         )
+        from IPython import embed
+        embed()
 
         return {
             'loss': loss,
@@ -365,6 +392,7 @@ class CSPFlow(BaseModule):
             'loss_type': loss_type,
             'loss_sym_lattice': loss_sym_l,
             'loss_sym_coord': loss_sym_f,
+            'loss_repa': proj_loss,
         }
 
     @staticmethod

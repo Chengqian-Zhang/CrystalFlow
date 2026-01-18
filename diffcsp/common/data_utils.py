@@ -37,6 +37,7 @@ from functools import partial
 import faulthandler
 faulthandler.enable()
 
+import ast
 
 
 # Tensor of unit cells. Assumes 27 cells in -1, 0, 1 offsets in the x and y dimensions
@@ -1313,6 +1314,17 @@ def process_one(row, niggli, primitive, graph_method, prop_list, use_space_group
         'graph_arrays': graph_arrays
     })
     result_dict.update(properties)
+    if "dpa3_rep" in row.keys():
+        __natoms = len(graph_arrays[0])
+        dpa3_rep = np.array(ast.literal_eval(row["dpa3_rep"])).reshape(__natoms, 128)
+        check_coords = np.array(ast.literal_eval(row["rep_coords"])).reshape(__natoms, 3)
+        check_rep_atypes = np.array(ast.literal_eval(row["rep_atypes"]))
+        assert np.allclose(check_rep_atypes, graph_arrays[1]-1)
+        assert np.allclose(check_coords, crystal.cart_coords)
+        result_dict.update({
+            "dpa3_rep": dpa3_rep,
+            "check_atype": check_rep_atypes
+        })
     return result_dict
 
 
@@ -1334,6 +1346,9 @@ def preprocess(
         df = pd.read_feather(input_file)
     else:
         raise ValueError(f"Unknown format of file: {input_file}")
+
+    # df = df[:10]
+    # unordered_results = [process_one(df.iloc[ii], niggli, primitive, graph_method, prop_list, use_space_group, tol) for ii in range(len(df))]
 
     unordered_results = p_umap(
         process_one,

@@ -20,6 +20,14 @@ from diffcsp.common.data_utils import (
 
 MAX_ATOMIC_NUM = 100
 
+def build_mlp(hidden_size, projector_dim, z_dim):
+    return nn.Sequential(
+                nn.Linear(hidden_size, projector_dim),
+                nn.SiLU(),
+                nn.Linear(projector_dim, projector_dim),
+                nn.SiLU(),
+                nn.Linear(projector_dim, z_dim),
+            )
 
 class SinusoidsEmbedding(nn.Module):
     def __init__(self, n_frequencies=10, n_space=3):
@@ -237,8 +245,21 @@ class CSPNet(nn.Module):
         pred_type=False,
         pred_scalar=False,
         type_encoding: None | nn.Module = None,
+        repa=False,
+        encoder_depth=3,
+        z_dims=[128],
     ):
         super(CSPNet, self).__init__()
+
+        # REPA parameters and modules start
+        self.repa = repa
+        if self.repa:
+            self.encoder_depth = encoder_depth
+            self.z_dims = z_dims
+            self.projectors = nn.ModuleList([
+                build_mlp(512, 1024, z_dim) for z_dim in self.z_dims
+            ])
+        # REPA parameters and modules end
 
         self.ip = ip
         self.smooth = smooth
@@ -506,6 +527,11 @@ class CSPNet(nn.Module):
                 frac_diff=frac_diff,
                 lattices_mat=lattices_mat,
             )
+            if self.repa:
+                if (i + 1) == self.encoder_depth:
+                    zs = [projector(node_features) for projector in self.projectors]
+            else:
+                zs = None
 
         if self.ln:
             node_features = self.final_layer_norm(node_features)
@@ -523,6 +549,6 @@ class CSPNet(nn.Module):
             lattice_out = torch.einsum('bij,bjk->bik', lattice_out, lattices_rep)
         if self.pred_type:
             type_out = self.type_out(node_features)
-            return lattice_out, coord_out, type_out
+            return lattice_out, coord_out, type_out, zs
 
-        return lattice_out, coord_out
+        return lattice_out, coord_out, zs

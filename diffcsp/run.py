@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import omegaconf
 import lightning as pl
-import wandb
+#import wandb
 import swanlab
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
@@ -21,7 +21,7 @@ from lightning.pytorch.callbacks import (
     TQDMProgressBar,
 )
 from lightning.pytorch.profilers import SimpleProfiler as Profiler
-from lightning.pytorch.loggers import WandbLogger
+#from lightning.pytorch.loggers import WandbLogger
 from swanlab.integration.pytorch_lightning import SwanLabLogger
 
 from diffcsp.common.utils import log_hyperparameters, PROJECT_ROOT
@@ -77,20 +77,20 @@ def build_callbacks(cfg: DictConfig) -> List[Callback]:
     return callbacks
 
 
-def get_wandb_logger(cfg, save_dir):
-    wandb_logger = None
-    if "wandb" in cfg.logging:
-        hydra.utils.log.info("Instantiating <WandbLogger>")
-        wandb_config = cfg.logging.wandb
-        wandb_logger = WandbLogger(
-            **wandb_config,
-            save_dir=save_dir,
-            settings=wandb.Settings(start_method="fork"),
-            tags=cfg.core.tags,
-        )
-    else:
-        hydra.utils.log.info("Not using <WandbLogger>")
-    return wandb_logger
+# def get_wandb_logger(cfg, save_dir):
+#     wandb_logger = None
+#     if "wandb" in cfg.logging:
+#         hydra.utils.log.info("Instantiating <WandbLogger>")
+#         wandb_config = cfg.logging.wandb
+#         wandb_logger = WandbLogger(
+#             **wandb_config,
+#             save_dir=save_dir,
+#             settings=wandb.Settings(start_method="fork"),
+#             tags=cfg.core.tags,
+#         )
+#     else:
+#         hydra.utils.log.info("Not using <WandbLogger>")
+#     return wandb_logger
 
 
 def get_swanlab_logger(cfg, save_dir):
@@ -254,7 +254,7 @@ def run(cfg: DictConfig) -> None:
         cfg.data.datamodule.num_workers.val = 0
         cfg.data.datamodule.num_workers.test = 0
         # Switch wandb mode to offline to prevent online logging
-        cfg.logging.wandb.mode = "offline"
+        #cfg.logging.wandb.mode = "offline"
         cfg.logging.swanlab.mode = "offline"
     save_cfg(cfg, run_dir)
 
@@ -264,22 +264,22 @@ def run(cfg: DictConfig) -> None:
     save_scaler(datamodule, run_dir)
 
     # Logger instantiation/configuration
-    wandb_logger = get_wandb_logger(cfg, run_dir)
-    hydra.utils.log.info(f"W&B is now watching <{cfg.logging.wandb_watch.log}>!")
-    wandb_logger.watch(
-        model,
-        log=cfg.logging.wandb_watch.log,
-        log_freq=cfg.logging.wandb_watch.log_freq,
-    )
+    # wandb_logger = get_wandb_logger(cfg, run_dir)
+    # hydra.utils.log.info(f"W&B is now watching <{cfg.logging.wandb_watch.log}>!")
+    # wandb_logger.watch(
+    #     model,
+    #     log=cfg.logging.wandb_watch.log,
+    #     log_freq=cfg.logging.wandb_watch.log_freq,
+    # )
     swanlab_logger = get_swanlab_logger(cfg, run_dir)
-    loggers = [logger for logger in [wandb_logger, swanlab_logger] if logger is not None]
+    #loggers = [logger for logger in [wandb_logger, swanlab_logger] if logger is not None]
 
     hydra.utils.log.info("Instantiating the Trainer")
     # Instantiate the callbacks
     callbacks: List[Callback] = build_callbacks(cfg=cfg)
     trainer = pl.Trainer(
         default_root_dir=run_dir,
-        logger=loggers,
+        #logger=loggers,
         callbacks=callbacks,
         deterministic=cfg.train.deterministic,
         check_val_every_n_epoch=cfg.logging.val_check_interval,
@@ -296,8 +296,8 @@ def run(cfg: DictConfig) -> None:
         trainer.test(datamodule=datamodule)
 
     # Logger closing to release resources/avoid multi-run conflicts
-    if wandb_logger is not None:
-        wandb_logger.experiment.finish()
+    #if wandb_logger is not None:
+    #    wandb_logger.experiment.finish()
     if swanlab_logger is not None:
         swanlab_logger.experiment.finish()
 
@@ -325,7 +325,7 @@ def finetune(cfg):
         cfg.data.datamodule.num_workers.val = 0
         cfg.data.datamodule.num_workers.test = 0
         # Switch wandb mode to offline to prevent online logging
-        cfg.logging.wandb.mode = "offline"
+        #cfg.logging.wandb.mode = "offline"
         cfg.logging.swanlab.mode = "offline"
 
 
@@ -343,21 +343,21 @@ def finetune(cfg):
     ft_schedule = find_finetune_schedule(cfg, run_dir, model)
 
     # Logger instantiation/configuration
-    wandb_logger = get_wandb_logger(cfg, run_dir)
-    hydra.utils.log.info(f"W&B is now watching <{cfg.logging.wandb_watch.log}>!")
-    wandb_logger.watch(
-        model,
-        log=cfg.logging.wandb_watch.log,
-        log_freq=cfg.logging.wandb_watch.log_freq,
-    )
+    # wandb_logger = get_wandb_logger(cfg, run_dir)
+    # hydra.utils.log.info(f"W&B is now watching <{cfg.logging.wandb_watch.log}>!")
+    # wandb_logger.watch(
+    #     model,
+    #     log=cfg.logging.wandb_watch.log,
+    #     log_freq=cfg.logging.wandb_watch.log_freq,
+    # )
     swanlab_logger = get_swanlab_logger(cfg, run_dir)
-    loggers = [logger for logger in [wandb_logger, swanlab_logger] if logger is not None]
+    #loggers = [logger for logger in [wandb_logger, swanlab_logger] if logger is not None]
 
     callbacks = build_callbacks(cfg)
     callbacks.append(FinetuningScheduler(ft_schedule=ft_schedule))
     trainer = pl.Trainer(
         default_root_dir=run_dir,
-        logger=loggers,
+        #logger=loggers,
         callbacks=callbacks,
         deterministic=cfg.train.deterministic,
         check_val_every_n_epoch=cfg.logging.val_check_interval,
@@ -374,8 +374,8 @@ def finetune(cfg):
     #    trainer.test(datamodule=datamodule)
 
     # Logger closing to release resources/avoid multi-run conflicts
-    if wandb_logger is not None:
-        wandb_logger.experiment.finish()
+    # if wandb_logger is not None:
+    #     wandb_logger.experiment.finish()
     if swanlab_logger is not None:
         swanlab_logger.experiment.finish()
 

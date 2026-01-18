@@ -113,26 +113,47 @@ class CrystDataset(Dataset):
         (frac_coords, atom_types, lengths, angles, edge_indices,
          to_jimages, num_atoms, lattice_polar) = data_dict['graph_arrays']
 
-        # atom_coords are fractional coordinates
-        # edge_index is incremented during batching
-        # https://pytorch-geometric.readthedocs.io/en/latest/notes/batching.html
-        data = SymData(
-            frac_coords=torch.Tensor(frac_coords),
-            atom_types=torch.LongTensor(atom_types),
-            lengths=torch.Tensor(lengths).view(1, -1),
-            angles=torch.Tensor(angles).view(1, -1),
-            lattice_polar=torch.Tensor(lattice_polar).view(1, -1),
-            edge_index=torch.LongTensor(edge_indices.T).contiguous(),  # shape (2, num_edges)
-            to_jimages=torch.LongTensor(to_jimages),
-            num_atoms=num_atoms,
-            num_bonds=edge_indices.shape[0],
-            num_nodes=num_atoms,  # special attribute used for batching in pytorch geometric
-            y=prop.view(1, -1),
-            **{
-                key: val.view(1, -1)
-                for key, val in prop_dict.items()
-            }
-        )
+        if "dpa3_rep" in data_dict.keys():
+            assert np.allclose(data_dict["check_atype"], atom_types-1)
+            data = SymData(
+                frac_coords=torch.Tensor(frac_coords),
+                atom_types=torch.LongTensor(atom_types),
+                lengths=torch.Tensor(lengths).view(1, -1),
+                angles=torch.Tensor(angles).view(1, -1),
+                lattice_polar=torch.Tensor(lattice_polar).view(1, -1),
+                edge_index=torch.LongTensor(edge_indices.T).contiguous(),  # shape (2, num_edges)
+                to_jimages=torch.LongTensor(to_jimages),
+                num_atoms=num_atoms,
+                num_bonds=edge_indices.shape[0],
+                num_nodes=num_atoms,  # special attribute used for batching in pytorch geometric
+                y=prop.view(1, -1),
+                dpa3_rep=torch.Tensor(data_dict["dpa3_rep"]),
+                **{
+                    key: val.view(1, -1)
+                    for key, val in prop_dict.items()
+                }
+            )
+        else:
+            # atom_coords are fractional coordinates
+            # edge_index is incremented during batching
+            # https://pytorch-geometric.readthedocs.io/en/latest/notes/batching.html
+            data = SymData(
+                frac_coords=torch.Tensor(frac_coords),
+                atom_types=torch.LongTensor(atom_types),
+                lengths=torch.Tensor(lengths).view(1, -1),
+                angles=torch.Tensor(angles).view(1, -1),
+                lattice_polar=torch.Tensor(lattice_polar).view(1, -1),
+                edge_index=torch.LongTensor(edge_indices.T).contiguous(),  # shape (2, num_edges)
+                to_jimages=torch.LongTensor(to_jimages),
+                num_atoms=num_atoms,
+                num_bonds=edge_indices.shape[0],
+                num_nodes=num_atoms,  # special attribute used for batching in pytorch geometric
+                y=prop.view(1, -1),
+                **{
+                    key: val.view(1, -1)
+                    for key, val in prop_dict.items()
+                }
+            )
 
         if self.use_space_group:
             data.spacegroup = torch.LongTensor([data_dict['spacegroup']])
