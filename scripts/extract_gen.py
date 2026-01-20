@@ -41,7 +41,7 @@ def main(args):
         crys_array_list, _ = get_crystal_array_list(pt, batch_idx=mode)
 
         if isinstance(crys_array_list[0], dict):  # no nesting
-            gen_crys = p_map(lambda x: Crystal(x, compute_fp=False), crys_array_list, num_cpus=args.njobs)
+            gen_crys = p_map(lambda x: Crystal(x, compute_fp=False, ignore_smact=True), crys_array_list, num_cpus=args.njobs)
             strcuture_list = [c.structure if c.constructed else None for c in gen_crys]
             extract_dir = Path(pt).with_suffix(".dir")
             extract_dir.mkdir(exist_ok=True, parents=True)

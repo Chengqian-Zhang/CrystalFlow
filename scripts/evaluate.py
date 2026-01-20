@@ -71,7 +71,7 @@ def main(args):
     # load_data if do reconstruction.
     model_path = Path(args.model_path)
     model, test_loader, cfg = load_model(
-        model_path, load_data=True, test_bs=args.test_bs)
+        model_path, load_data=True, test_bs=args.test_bs, nepoch=args.nepoch)
 
     if torch.cuda.is_available():
         model.to('cuda')
@@ -110,6 +110,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-m', '--model_path', required=True)
+    parser.add_argument('--nepoch', required=True)
     parser.add_argument('--num_evals', metavar='NEVAL', default=1, type=int, help="num repeat for each sample.")
     parser.add_argument('--test_bs', type=int, help="overwrite testset batchsize.")
     parser.add_argument('--label', default='', help="label for output")

@@ -222,7 +222,7 @@ def parse_conditions(cond_string: str | None) -> dict:
 def main(args):
     # load_data if do reconstruction.
     model_path = Path(args.model_path)
-    model, _, cfg = load_model(model_path, load_data=False)
+    model, _, cfg = load_model(model_path, load_data=False, nepoch=args.nepoch)
 
     if args.guide_factor is not None:
         conditions = parse_conditions(args.conditions)
@@ -274,6 +274,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model_path', required=True)
+    parser.add_argument('--nepoch', required=True)
     parser.add_argument('-S', '--num_batches_to_samples', default=20, type=int, help='number of batches to sample (default: 20)')
     parser.add_argument('-B', '--batch_size', default=500, type=int, help='sample batch size (default: 500)')
     parser.add_argument('--label', default='')

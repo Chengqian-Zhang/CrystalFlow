@@ -382,8 +382,6 @@ class CSPFlow(BaseModule):
             + self.cost_sym_lattice * loss_sym_l
             + self.cost_sym_coord   * loss_sym_f
         )
-        from IPython import embed
-        embed()
 
         return {
             'loss': loss,
@@ -408,9 +406,9 @@ class CSPFlow(BaseModule):
         anneal_slope=0.0, anneal_offset=0.0,
     ):
         if self.pred_type:
-            pred_l, pred_f, pred_t = pred
+            pred_l, pred_f, pred_t, _ = pred
         else:
-            pred_l, pred_f = pred
+            pred_l, pred_f, _ = pred
         if self.symmetrize_anchor:
             if self.lattice_polar:
                 pred_l = self.latticedecompnn.proj_kdiff_to_spacegroup(pred_l, batch.spacegroup)
@@ -844,6 +842,7 @@ class CSPFlow(BaseModule):
                 'type_loss': output_dict['loss_type'],
                 'sym_lattice_loss': output_dict['loss_sym_lattice'],
                 'sym_coord_loss': output_dict['loss_sym_coord'],
+                'repa_loss': output_dict['loss_repa'],
             },
             on_step=True,
             on_epoch=True,
@@ -892,6 +891,7 @@ class CSPFlow(BaseModule):
             f'{prefix}_type_loss': output_dict['loss_type'],
             f'{prefix}_sym_lattice_loss': output_dict['loss_sym_lattice'],
             f'{prefix}_sym_coord_loss': output_dict['loss_sym_coord'],
+            f'{prefix}_repa_loss': output_dict['loss_repa'],
         }
 
         return log_dict, loss

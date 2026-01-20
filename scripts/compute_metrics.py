@@ -54,7 +54,7 @@ COV_Cutoffs = {
 
 class Crystal(object):
 
-    def __init__(self, crys_array_dict, compute_valid=True, compute_fp=True, ignore_smact=False):
+    def __init__(self, crys_array_dict, compute_valid=True, compute_fp=True, ignore_smact=True):
         self.frac_coords = crys_array_dict['frac_coords']
         self.atom_types = crys_array_dict['atom_types']
         self.lengths = crys_array_dict['lengths']

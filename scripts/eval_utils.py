@@ -90,7 +90,7 @@ def load_config(model_path):
     return cfg
 
 
-def load_model(model_path, load_data=False, testing=True, test_bs=None):
+def load_model(model_path, load_data=False, testing=True, test_bs=None, nepoch=None):
     with initialize_config_dir(str(model_path), version_base="1.3"):
         cfg = hydra.compose(config_name='hparams')
         model = hydra.utils.instantiate(
@@ -100,16 +100,22 @@ def load_model(model_path, load_data=False, testing=True, test_bs=None):
             logging=cfg.logging,
             _recursive_=False,
         )
-        ckpts = list(model_path.glob('*.ckpt'))
-        if len(ckpts) > 0:
-            ckpt = None
-            for ck in ckpts:
-                if 'last' in ck.parts[-1]:
-                    ckpt = str(ck)
-            if ckpt is None:
-                ckpt_epochs = np.array(
-                    [int(ckpt.parts[-1].split('-')[0].split('=')[1]) for ckpt in ckpts if 'last' not in ckpt.parts[-1]])
-                ckpt = str(ckpts[ckpt_epochs.argsort()[-1]])
+        if nepoch is not None:
+            ckpts = list(model_path.glob(f'*={nepoch}-*.ckpt'))
+            assert len(ckpts) == 1
+            ckpt = str(ckpts[0])
+            print(f"Load {ckpt}.")
+        else:
+            ckpts = list(model_path.glob('*.ckpt'))
+            if len(ckpts) > 0:
+                ckpt = None
+                for ck in ckpts:
+                    if 'last' in ck.parts[-1]:
+                        ckpt = str(ck)
+                if ckpt is None:
+                    ckpt_epochs = np.array(
+                        [int(ckpt.parts[-1].split('-')[0].split('=')[1]) for ckpt in ckpts if 'last' not in ckpt.parts[-1]])
+                    ckpt = str(ckpts[ckpt_epochs.argsort()[-1]])
         hparams = os.path.join(model_path, "hparams.yaml")
         model = model.__class__.load_from_checkpoint(ckpt, hparams_file=hparams, strict=False)
         print("Model loaded with ", sum(p.numel() for p in model.parameters()), " parameters.")

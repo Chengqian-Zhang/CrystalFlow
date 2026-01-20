@@ -115,6 +115,7 @@ class CrystDataset(Dataset):
 
         if "dpa3_rep" in data_dict.keys():
             assert np.allclose(data_dict["check_atype"], atom_types-1)
+            assert np.allclose(data_dict["check_frac_coords"], frac_coords)
             data = SymData(
                 frac_coords=torch.Tensor(frac_coords),
                 atom_types=torch.LongTensor(atom_types),

@@ -65,6 +65,7 @@ def build_callbacks(cfg: DictConfig) -> List[Callback]:
                 save_top_k=cfg.train.model_checkpoints.save_top_k,
                 verbose=cfg.train.model_checkpoints.verbose,
                 save_last=cfg.train.model_checkpoints.save_last,
+                every_n_epochs=cfg.train.model_checkpoints.get("every_n_epochs", 100),
             )
         )
 
