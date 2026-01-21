@@ -20,14 +20,17 @@ from diffcsp.common.data_utils import (
 
 MAX_ATOMIC_NUM = 100
 
-def build_mlp(hidden_size, projector_dim, z_dim):
-    return nn.Sequential(
-                nn.Linear(hidden_size, projector_dim),
-                nn.SiLU(),
-                nn.Linear(projector_dim, projector_dim),
-                nn.SiLU(),
-                nn.Linear(projector_dim, z_dim),
-            )
+def build_mlp(hidden_size, projector_dim, z_dim, linear_trans):
+    if linear_trans:
+        return nn.Linear(hidden_size, z_dim)
+    else:
+        return nn.Sequential(
+                    nn.Linear(hidden_size, projector_dim),
+                    nn.SiLU(),
+                    nn.Linear(projector_dim, projector_dim),
+                    nn.SiLU(),
+                    nn.Linear(projector_dim, z_dim),
+                )
 
 class SinusoidsEmbedding(nn.Module):
     def __init__(self, n_frequencies=10, n_space=3):
@@ -248,17 +251,23 @@ class CSPNet(nn.Module):
         repa=False,
         encoder_depth=3,
         z_dims=[128],
+        linear_trans=False,
+        projector_dim=1024,
+        no_mlp=False,
     ):
         super(CSPNet, self).__init__()
 
+        self.hidden_dim = hidden_dim
         # REPA parameters and modules start
         self.repa = repa
         if self.repa:
             self.encoder_depth = encoder_depth
             self.z_dims = z_dims
-            self.projectors = nn.ModuleList([
-                build_mlp(512, 1024, z_dim) for z_dim in self.z_dims
-            ])
+            self.no_mlp = no_mlp
+            if not no_mlp:
+                self.projectors = nn.ModuleList([
+                    build_mlp(hidden_dim, projector_dim, z_dim, linear_trans) for z_dim in self.z_dims
+                ])
         # REPA parameters and modules end
 
         self.ip = ip
@@ -529,7 +538,12 @@ class CSPNet(nn.Module):
             )
             if self.repa:
                 if (i + 1) == self.encoder_depth:
-                    zs = [projector(node_features) for projector in self.projectors]
+                    if self.no_mlp:
+                        for z_dim in self.z_dims:
+                            assert z_dim == self.hidden_dim
+                        zs = [node_features for _ in self.z_dims]
+                    else:
+                        zs = [projector(node_features) for projector in self.projectors]
             else:
                 zs = None
 

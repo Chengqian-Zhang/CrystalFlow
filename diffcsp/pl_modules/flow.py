@@ -104,6 +104,9 @@ class CSPFlow(BaseModule):
         super().__init__(*args, **kwargs)
 
         self.repa_models = self.hparams.get("repa_models", None)
+        self.sim_method = self.hparams.get("sim_method", "cosine")
+        if (self.sim_method == "ntxent") or (self.sim_method == "bi_cross_entropy"):
+            self.tau = self.hparams.get("tau", 0.1)
 
         if self.hparams.time_dim == 0:
             self.time_dim = 1
@@ -354,11 +357,48 @@ class CSPFlow(BaseModule):
             assert self.repa_models is not None
             assert len(self.repa_models) == len(zs_tilde)
             zs = [batch.dpa3_rep] # hack at this moment
-            for z, z_tilde in zip(zs, zs_tilde):
-                z_tilde = torch.nn.functional.normalize(z_tilde, dim=-1) 
-                z = torch.nn.functional.normalize(z, dim=-1) 
-                proj_loss += mean_flat(-(z * z_tilde).sum(dim=-1))
-            proj_loss /= len(zs)
+            if self.sim_method == "ntxent":
+                for z, z_tilde in zip(zs, zs_tilde):
+                    # Normalize representations for cosine similarity calculation
+                    z_tilde = F.normalize(z_tilde, dim=-1)
+                    z = F.normalize(z, dim=-1)
+                    assert batch.num_nodes == z.shape[0]
+                    reps = torch.cat([z_tilde, z], dim=0) # [2N, 128]
+                    # Compute similarity matrix
+                    sim_matrix = torch.matmul(reps, reps.T) / self.tau # [2N, 2N]
+                    # Exclude self-contrast
+                    mask = torch.eye(2 * batch.num_nodes, device=self.device).bool()
+                    sim_matrix = sim_matrix.masked_fill(mask, -9e15)
+                    # Generate labels
+                    labels = torch.cat([
+                        torch.arange(batch.num_nodes, 2 * batch.num_nodes, device=self.device),
+                        torch.arange(0, batch.num_nodes, device=self.device)
+                    ], dim=0)
+                    # Compute loss
+                    proj_loss += F.cross_entropy(sim_matrix, labels)
+                proj_loss /= len(zs)
+            elif self.sim_method == "bi_cross_entropy":
+                for z, z_tilde in zip(zs, zs_tilde):
+                    # Normalize representations for cosine similarity calculation
+                    z_tilde = F.normalize(z_tilde, dim=-1)
+                    z = F.normalize(z, dim=-1)
+                    # Compute similarity matrix
+                    sim_matrix = torch.matmul(z_tilde, z.T) / self.tau
+                    # Generate labels
+                    labels = torch.arange(batch.num_nodes, device=self.device)
+                    # Compute loss
+                    loss_i = F.cross_entropy(sim_matrix, labels)
+                    loss_j = F.cross_entropy(sim_matrix.T, labels)
+                    proj_loss += (loss_i + loss_j) / 2
+                proj_loss /= len(zs)
+            elif self.sim_method == "cosine":
+                for z, z_tilde in zip(zs, zs_tilde):
+                    z_tilde = torch.nn.functional.normalize(z_tilde, dim=-1)
+                    z = torch.nn.functional.normalize(z, dim=-1)
+                    proj_loss += mean_flat(-(z * z_tilde).sum(dim=-1))
+                proj_loss /= len(zs)
+            else:
+                raise RuntimeError("The training objectives for alignment must be Normalized Temperature-scaled Cross Entropy (ntxent) or negative cosine similarity (cosine)!")
         else:
             repa = False
             proj_loss = 0.0
