@@ -116,6 +116,8 @@ class CrystDataset(Dataset):
         if "dpa3_rep" in data_dict.keys():
             assert np.allclose(data_dict["check_atype"], atom_types-1)
             assert np.allclose(data_dict["check_frac_coords"], frac_coords)
+            assert np.allclose(data_dict["check_atype_list"], atom_types-1)
+            assert np.allclose(data_dict["check_frac_coords_list"], frac_coords)
             data = SymData(
                 frac_coords=torch.Tensor(frac_coords),
                 atom_types=torch.LongTensor(atom_types),
@@ -129,6 +131,7 @@ class CrystDataset(Dataset):
                 num_nodes=num_atoms,  # special attribute used for batching in pytorch geometric
                 y=prop.view(1, -1),
                 dpa3_rep=torch.Tensor(data_dict["dpa3_rep"]),
+                dpa3_rep_list=torch.Tensor(data_dict["dpa3_rep_list"].transpose(1, 0, 2)),
                 **{
                     key: val.view(1, -1)
                     for key, val in prop_dict.items()

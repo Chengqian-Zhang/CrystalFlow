@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import math
+import omegaconf
 from torch_scatter import scatter
 from torch_scatter.composite import scatter_softmax
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
@@ -265,9 +266,17 @@ class CSPNet(nn.Module):
             self.z_dims = z_dims
             self.no_mlp = no_mlp
             if not no_mlp:
-                self.projectors = nn.ModuleList([
-                    build_mlp(hidden_dim, projector_dim, z_dim, linear_trans) for z_dim in self.z_dims
-                ])
+                if isinstance(self.encoder_depth, int):
+                    self.projectors = nn.ModuleList([
+                        build_mlp(hidden_dim, projector_dim, z_dim, linear_trans) for z_dim in self.z_dims
+                    ])
+                elif isinstance(self.encoder_depth, omegaconf.listconfig.ListConfig): # omegaconf.listconfig.ListConfig
+                    assert len(self.z_dims) == 1
+                    self.projectors = nn.ModuleList([
+                        build_mlp(hidden_dim, projector_dim, self.z_dims[0], linear_trans) for _ in self.encoder_depth
+                    ])
+                else:
+                    raise RuntimeError("Key `encoder_depth` must be list or int.")
         # REPA parameters and modules end
 
         self.ip = ip
@@ -517,6 +526,9 @@ class CSPNet(nn.Module):
         node_features = torch.cat([node_features, t_per_atom], dim=1)
         node_features = self.atom_latent_emb(node_features)
 
+        if isinstance(self.encoder_depth, omegaconf.listconfig.ListConfig):
+            zs = []
+
         for i in range(0, self.num_layers):
             # may exist cemb
             if cemb is not None:
@@ -537,13 +549,26 @@ class CSPNet(nn.Module):
                 lattices_mat=lattices_mat,
             )
             if self.repa:
-                if (i + 1) == self.encoder_depth:
-                    if self.no_mlp:
-                        for z_dim in self.z_dims:
-                            assert z_dim == self.hidden_dim
-                        zs = [node_features for _ in self.z_dims]
-                    else:
-                        zs = [projector(node_features) for projector in self.projectors]
+                if isinstance(self.encoder_depth, int):
+                    if (i + 1) == self.encoder_depth:
+                        if self.no_mlp:
+                            for z_dim in self.z_dims:
+                                assert z_dim == self.hidden_dim
+                            zs = [node_features for _ in self.z_dims]
+                        else:
+                            zs = [projector(node_features) for projector in self.projectors]
+                elif isinstance(self.encoder_depth, omegaconf.listconfig.ListConfig):
+                    assert len(self.z_dims) == 1, f"Only support aligning one pretrained model when aligning multi layers."
+                    assert len(self.projectors) == len(self.encoder_depth), f"Number of MLPs do not match align layers."
+                    for __idx, single_depth in enumerate(self.encoder_depth):
+                        if (i + 1) == single_depth:
+                            if self.no_mlp:
+                                assert self.z_dims[0] == self.hidden_dim
+                                zs.append(node_features)
+                            else:
+                                zs.append(self.projectors[__idx](node_features))
+                else:
+                    raise RuntimeError("Key `encoder_depth` must be list or int.")
             else:
                 zs = None
 

@@ -1320,13 +1320,23 @@ def process_one(row, niggli, primitive, graph_method, prop_list, use_space_group
         check_coords = np.array(ast.literal_eval(row["check_dpa3_coords"])).reshape(__natoms, 3)
         check_frac_coords = np.array(ast.literal_eval(row["check_dpa3_frac_coords"])).reshape(__natoms, 3)
         check_rep_atypes = np.array(ast.literal_eval(row["check_dpa3_atypes"]))
+        dpa3_rep_list = np.array(ast.literal_eval(row["dpa3_rep_list"])).reshape(16, __natoms, 128)
+        check_coords_list = np.array(ast.literal_eval(row["check_dpa3_coords_list"])).reshape(__natoms, 3)
+        check_frac_coords_list = np.array(ast.literal_eval(row["check_dpa3_frac_coords_list"])).reshape(__natoms, 3)
+        check_rep_atypes_list = np.array(ast.literal_eval(row["check_dpa3_atypes_list"]))
         assert np.allclose(check_rep_atypes, graph_arrays[1]-1)
         assert np.allclose(check_coords, crystal.cart_coords)
         assert np.allclose(check_frac_coords, crystal.frac_coords)
+        assert np.allclose(check_rep_atypes_list, graph_arrays[1]-1)
+        assert np.allclose(check_coords_list, crystal.cart_coords)
+        assert np.allclose(check_frac_coords_list, crystal.frac_coords)
         result_dict.update({
             "dpa3_rep": dpa3_rep,
             "check_atype": check_rep_atypes,
             "check_frac_coords": check_frac_coords,
+            "dpa3_rep_list": dpa3_rep_list,
+            "check_atype_list": check_rep_atypes_list,
+            "check_frac_coords_list": check_frac_coords_list,
         })
     return result_dict
 

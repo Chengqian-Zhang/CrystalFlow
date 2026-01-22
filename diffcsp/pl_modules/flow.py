@@ -107,6 +107,12 @@ class CSPFlow(BaseModule):
         self.sim_method = self.hparams.get("sim_method", "cosine")
         if (self.sim_method == "ntxent") or (self.sim_method == "bi_cross_entropy"):
             self.tau = self.hparams.get("tau", 0.1)
+        self.align_layers = self.hparams.get("align_layers", None)
+        if self.align_layers is not None:
+            self.multi_align = True
+        self.align_weights = self.hparams.get("align_weights", [1.0])
+        if len(self.align_weights) > 1:
+            assert len(self.align_weights) == len(self.align_layers)
 
         if self.hparams.time_dim == 0:
             self.time_dim = 1
@@ -355,10 +361,18 @@ class CSPFlow(BaseModule):
             repa = True
             proj_loss = 0.0
             assert self.repa_models is not None
-            assert len(self.repa_models) == len(zs_tilde)
-            zs = [batch.dpa3_rep] # hack at this moment
+            if self.multi_align:
+                assert len(self.repa_models) * len(self.align_layers) == len(zs_tilde)
+                assert torch.allclose(batch.dpa3_rep_list[:,-1,:], batch.dpa3_rep, rtol=1e-2, atol=1e-3)
+                zs = []
+                for __layer in self.align_layers:
+                    zs.append(batch.dpa3_rep_list[:, __layer - 1, :])
+            else:
+                assert len(self.repa_models) == len(zs_tilde)
+                zs = [batch.dpa3_rep] # hack at this moment
+
             if self.sim_method == "ntxent":
-                for z, z_tilde in zip(zs, zs_tilde):
+                for __idx, (z, z_tilde) in enumerate(zip(zs, zs_tilde)):
                     # Normalize representations for cosine similarity calculation
                     z_tilde = F.normalize(z_tilde, dim=-1)
                     z = F.normalize(z, dim=-1)
@@ -375,10 +389,10 @@ class CSPFlow(BaseModule):
                         torch.arange(0, batch.num_nodes, device=self.device)
                     ], dim=0)
                     # Compute loss
-                    proj_loss += F.cross_entropy(sim_matrix, labels)
+                    proj_loss += self.align_weights[__idx] * F.cross_entropy(sim_matrix, labels)
                 proj_loss /= len(zs)
             elif self.sim_method == "bi_cross_entropy":
-                for z, z_tilde in zip(zs, zs_tilde):
+                for __idx, (z, z_tilde) in enumerate(zip(zs, zs_tilde)):
                     # Normalize representations for cosine similarity calculation
                     z_tilde = F.normalize(z_tilde, dim=-1)
                     z = F.normalize(z, dim=-1)
@@ -389,13 +403,14 @@ class CSPFlow(BaseModule):
                     # Compute loss
                     loss_i = F.cross_entropy(sim_matrix, labels)
                     loss_j = F.cross_entropy(sim_matrix.T, labels)
-                    proj_loss += (loss_i + loss_j) / 2
+                    proj_loss += self.align_weights[__idx] * (loss_i + loss_j) / 2
                 proj_loss /= len(zs)
             elif self.sim_method == "cosine":
-                for z, z_tilde in zip(zs, zs_tilde):
+                for __idx, (z, z_tilde) in enumerate(zip(zs, zs_tilde)):
+                    assert len(zs) == len(self.align_weights)
                     z_tilde = torch.nn.functional.normalize(z_tilde, dim=-1)
                     z = torch.nn.functional.normalize(z, dim=-1)
-                    proj_loss += mean_flat(-(z * z_tilde).sum(dim=-1))
+                    proj_loss += self.align_weights[__idx] * mean_flat(-(z * z_tilde).sum(dim=-1))
                 proj_loss /= len(zs)
             else:
                 raise RuntimeError("The training objectives for alignment must be Normalized Temperature-scaled Cross Entropy (ntxent) or negative cosine similarity (cosine)!")
