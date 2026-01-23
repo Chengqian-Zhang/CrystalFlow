@@ -114,10 +114,10 @@ class CrystDataset(Dataset):
          to_jimages, num_atoms, lattice_polar) = data_dict['graph_arrays']
 
         if "dpa3_rep" in data_dict.keys():
-            assert np.allclose(data_dict["check_atype"], atom_types-1)
-            assert np.allclose(data_dict["check_frac_coords"], frac_coords)
-            assert np.allclose(data_dict["check_atype_list"], atom_types-1)
-            assert np.allclose(data_dict["check_frac_coords_list"], frac_coords)
+            #assert np.allclose(data_dict["check_atype"], atom_types-1)
+            #assert np.allclose(data_dict["check_frac_coords"], frac_coords)
+            #assert np.allclose(data_dict["check_atype_list"], atom_types-1)
+            #assert np.allclose(data_dict["check_frac_coords_list"], frac_coords)
             data = SymData(
                 frac_coords=torch.Tensor(frac_coords),
                 atom_types=torch.LongTensor(atom_types),

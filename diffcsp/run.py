@@ -251,9 +251,9 @@ def run(cfg: DictConfig) -> None:
         )
         # Debuggers don't like GPUs nor multiprocessing
         # cfg.train.pl_trainer.gpus = 0
-        cfg.data.datamodule.num_workers.train = 0
-        cfg.data.datamodule.num_workers.val = 0
-        cfg.data.datamodule.num_workers.test = 0
+        cfg.data.datamodule.num_workers.train = 127
+        cfg.data.datamodule.num_workers.val = 127
+        cfg.data.datamodule.num_workers.test = 127
         # Switch wandb mode to offline to prevent online logging
         #cfg.logging.wandb.mode = "offline"
         cfg.logging.swanlab.mode = "offline"
@@ -322,9 +322,9 @@ def finetune(cfg):
         )
         # Debuggers don't like GPUs nor multiprocessing
         # cfg.train.pl_trainer.gpus = 0
-        cfg.data.datamodule.num_workers.train = 0
-        cfg.data.datamodule.num_workers.val = 0
-        cfg.data.datamodule.num_workers.test = 0
+        cfg.data.datamodule.num_workers.train = 127
+        cfg.data.datamodule.num_workers.val = 127
+        cfg.data.datamodule.num_workers.test = 127
         # Switch wandb mode to offline to prevent online logging
         #cfg.logging.wandb.mode = "offline"
         cfg.logging.swanlab.mode = "offline"

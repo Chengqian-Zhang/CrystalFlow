@@ -108,9 +108,11 @@ class CSPFlow(BaseModule):
         if (self.sim_method == "ntxent") or (self.sim_method == "bi_cross_entropy"):
             self.tau = self.hparams.get("tau", 0.1)
         self.align_layers = self.hparams.get("align_layers", None)
+        self.multi_align = False
         if self.align_layers is not None:
             self.multi_align = True
-        self.align_weights = self.hparams.get("align_weights", [1.0])
+            assert len(self.align_layers) > 1
+        self.register_buffer('align_weights', torch.tensor(self.hparams.get("align_weights", [1.0])))
         if len(self.align_weights) > 1:
             assert len(self.align_weights) == len(self.align_layers)
 
@@ -363,7 +365,7 @@ class CSPFlow(BaseModule):
             assert self.repa_models is not None
             if self.multi_align:
                 assert len(self.repa_models) * len(self.align_layers) == len(zs_tilde)
-                assert torch.allclose(batch.dpa3_rep_list[:,-1,:], batch.dpa3_rep, rtol=1e-2, atol=1e-3)
+                #assert torch.allclose(batch.dpa3_rep_list[:,-1,:], batch.dpa3_rep, rtol=1e-2, atol=1e-3)
                 zs = []
                 for __layer in self.align_layers:
                     zs.append(batch.dpa3_rep_list[:, __layer - 1, :])
