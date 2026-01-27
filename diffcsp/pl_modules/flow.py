@@ -115,6 +115,20 @@ class CSPFlow(BaseModule):
         self.register_buffer('align_weights', torch.tensor(self.hparams.get("align_weights", [1.0])))
         if len(self.align_weights) > 1:
             assert len(self.align_weights) == len(self.align_layers)
+        # REPA prefactor
+        self.cost_repa = self.hparams.get("cost_repa", 0.0)
+        self.cost_repa_start = self.hparams.get("cost_repa_start", 0.0)
+        self.cost_repa_end = self.hparams.get("cost_repa_end", 0.0)
+        if self.repa_models is not None: # use repa, must have `cost_repa``
+            if self.cost_repa > 0: # constant prefactor
+                assert self.cost_repa_start == 0.0
+                assert self.cost_repa_end == 0.0
+                self.dynamic_prefactor = False
+            else: # dynamic prefactor
+                assert self.cost_repa_start > 0.0
+                assert self.cost_repa_end > 0.0
+                self.dynamic_prefactor = True
+                self.dynamic_scheduler = self.hparams.get("dynamic_scheduler", None)
 
         if self.hparams.time_dim == 0:
             self.time_dim = 1
@@ -430,7 +444,24 @@ class CSPFlow(BaseModule):
         cost_coord = self.hparams.cost_coord
         cost_lattice = 0.0 if lattice_teacher_forcing else self.hparams.cost_lattice
         cost_type    = 0.0 if not self.pred_type      else self.hparams.cost_type
-        cost_repa    = 0.0 if not repa                else self.hparams.cost_repa 
+        # Deal with prefactor
+        if repa:
+            if self.dynamic_prefactor:
+                progress = self.current_epoch / self.trainer.max_epochs
+                if self.dynamic_scheduler == "linear":
+                    cost_repa = self.cost_repa_start + (self.cost_repa_end - self.cost_repa_start) * progress
+                elif self.dynamic_scheduler == "exp":
+                    cost_repa = self.cost_repa_start * ((self.cost_repa_end / self.cost_repa_start) ** progress)
+                elif self.dynamic_scheduler == "cos":
+                    cos_out = (1 + math.cos(math.pi * progress)) / 2
+                    cost_repa = self.cost_repa_end + (self.cost_repa_start - self.cost_repa_end) * cos_out
+                else:
+                    raise ValueError(f"Unknown scheduler type: {self.dynamic_scheduler}")
+            else:
+                cost_repa = self.cost_repa
+        else:
+            cost_repa    = 0.0
+
         loss = (
               cost_lattice * loss_lattice
             + cost_coord   * loss_coord
@@ -448,6 +479,7 @@ class CSPFlow(BaseModule):
             'loss_sym_lattice': loss_sym_l,
             'loss_sym_coord': loss_sym_f,
             'loss_repa': proj_loss,
+            'cost_repa': cost_repa,
         }
 
     @staticmethod
@@ -900,6 +932,7 @@ class CSPFlow(BaseModule):
                 'sym_lattice_loss': output_dict['loss_sym_lattice'],
                 'sym_coord_loss': output_dict['loss_sym_coord'],
                 'repa_loss': output_dict['loss_repa'],
+                'cost_repa': output_dict['cost_repa'],
             },
             on_step=True,
             on_epoch=True,
@@ -949,6 +982,7 @@ class CSPFlow(BaseModule):
             f'{prefix}_sym_lattice_loss': output_dict['loss_sym_lattice'],
             f'{prefix}_sym_coord_loss': output_dict['loss_sym_coord'],
             f'{prefix}_repa_loss': output_dict['loss_repa'],
+            f'{prefix}_cost_repa': output_dict['cost_repa'],
         }
 
         return log_dict, loss

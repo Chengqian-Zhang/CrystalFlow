@@ -21,9 +21,34 @@ from diffcsp.common.data_utils import (
 
 MAX_ATOMIC_NUM = 100
 
-def build_mlp(hidden_size, projector_dim, z_dim, linear_trans):
+class ResidualLayer(nn.Module):
+    def __init__(self, size):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(size, size),
+            nn.SiLU()
+        )
+
+    def forward(self, x):
+        # Core: (x) + x
+        return self.net(x) + x
+
+def build_mlp(hidden_size, projector_dim, z_dim, linear_trans, residual_layers=-1):
     if linear_trans:
         return nn.Linear(hidden_size, z_dim)
+    elif residual_layers == 2:
+        assert hidden_size == projector_dim
+        return nn.Sequential(
+            ResidualLayer(hidden_size),
+            ResidualLayer(hidden_size),
+            nn.Linear(hidden_size, z_dim),
+        )
+    elif residual_layers == 1:
+        assert hidden_size == projector_dim
+        return nn.Sequential(
+            ResidualLayer(hidden_size),
+            nn.Linear(hidden_size, z_dim),
+        )
     else:
         return nn.Sequential(
                     nn.Linear(hidden_size, projector_dim),
@@ -254,6 +279,7 @@ class CSPNet(nn.Module):
         encoder_depths=None,
         z_dims=[128],
         linear_trans=False,
+        residual_layers=-1,
         projector_dim=1024,
         no_mlp=False,
     ):
@@ -271,11 +297,11 @@ class CSPNet(nn.Module):
                 if encoder_depths is not None:
                     assert len(self.z_dims) == 1
                     self.projectors = nn.ModuleList([
-                        build_mlp(hidden_dim, projector_dim, self.z_dims[0], linear_trans) for _ in self.encoder_depths
+                        build_mlp(hidden_dim, projector_dim, self.z_dims[0], linear_trans, residual_layers) for _ in self.encoder_depths
                     ])
                 else:
                     self.projectors = nn.ModuleList([
-                        build_mlp(hidden_dim, projector_dim, z_dim, linear_trans) for z_dim in self.z_dims
+                        build_mlp(hidden_dim, projector_dim, z_dim, linear_trans, residual_layers) for z_dim in self.z_dims
                     ])
         # REPA parameters and modules end
 

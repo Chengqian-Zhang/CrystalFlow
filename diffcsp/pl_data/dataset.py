@@ -131,7 +131,7 @@ class CrystDataset(Dataset):
                 num_nodes=num_atoms,  # special attribute used for batching in pytorch geometric
                 y=prop.view(1, -1),
                 dpa3_rep=torch.Tensor(data_dict["dpa3_rep"]),
-                dpa3_rep_list=torch.Tensor(data_dict["dpa3_rep_list"].transpose(1, 0, 2)),
+                #dpa3_rep_list=torch.Tensor(data_dict["dpa3_rep_list"].transpose(1, 0, 2)),
                 **{
                     key: val.view(1, -1)
                     for key, val in prop_dict.items()
