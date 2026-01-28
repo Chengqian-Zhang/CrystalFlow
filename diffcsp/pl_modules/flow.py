@@ -107,6 +107,8 @@ class CSPFlow(BaseModule):
         self.sim_method = self.hparams.get("sim_method", "cosine")
         if (self.sim_method == "ntxent") or (self.sim_method == "bi_cross_entropy"):
             self.tau = self.hparams.get("tau", 0.1)
+            self.repa_type_masking = self.hparams.get("repa_type_masking", False)
+            hydra.utils.log.info(f"Using {self.sim_method} t={self.tau} repa_type_masking={self.repa_type_masking}")
         self.align_layers = self.hparams.get("align_layers", None)
         self.multi_align = False
         if self.align_layers is not None:
@@ -379,10 +381,10 @@ class CSPFlow(BaseModule):
             assert self.repa_models is not None
             if self.multi_align:
                 assert len(self.repa_models) * len(self.align_layers) == len(zs_tilde)
-                #assert torch.allclose(batch.dpa3_rep_list[:,-1,:], batch.dpa3_rep, rtol=1e-2, atol=1e-3)
+                assert torch.allclose(batch.dpa3_all_reps[:,-1,:], batch.dpa3_rep, rtol=1e-3, atol=1e-5)
                 zs = []
                 for __layer in self.align_layers:
-                    zs.append(batch.dpa3_rep_list[:, __layer - 1, :])
+                    zs.append(batch.dpa3_all_reps[:, __layer - 1, :])
             else:
                 assert len(self.repa_models) == len(zs_tilde)
                 zs = [batch.dpa3_rep] # hack at this moment
@@ -396,9 +398,21 @@ class CSPFlow(BaseModule):
                     reps = torch.cat([z_tilde, z], dim=0) # [2N, 128]
                     # Compute similarity matrix
                     sim_matrix = torch.matmul(reps, reps.T) / self.tau # [2N, 2N]
-                    # Exclude self-contrast
-                    mask = torch.eye(2 * batch.num_nodes, device=self.device).bool()
-                    sim_matrix = sim_matrix.masked_fill(mask, -9e15)
+                    if self.repa_type_masking:
+                        types_2n = torch.cat([batch.atom_types, batch.atom_types], dim=0) # [2N]
+                        diff_type_mask = (types_2n.unsqueeze(0) != types_2n.unsqueeze(1))
+                        # maintaining positive pairs (i, i+N) and (i+N, i)
+                        pos_mask = torch.eye(batch.num_nodes, device=self.device).bool()
+                        pos_mask_2n = torch.zeros((2 * batch.num_nodes, 2 * batch.num_nodes), device=self.device).bool()
+                        pos_mask_2n[:batch.num_nodes, batch.num_nodes:] = pos_mask
+                        pos_mask_2n[batch.num_nodes:, :batch.num_nodes] = pos_mask
+                        # different types or positive pairs
+                        valid_mask = diff_type_mask | pos_mask_2n
+                        sim_matrix = sim_matrix.masked_fill(~valid_mask, -9e15)
+                    else:
+                        # Exclude self-contrast
+                        mask = torch.eye(2 * batch.num_nodes, device=self.device).bool()
+                        sim_matrix = sim_matrix.masked_fill(mask, -9e15)
                     # Generate labels
                     labels = torch.cat([
                         torch.arange(batch.num_nodes, 2 * batch.num_nodes, device=self.device),
@@ -414,6 +428,11 @@ class CSPFlow(BaseModule):
                     z = F.normalize(z, dim=-1)
                     # Compute similarity matrix
                     sim_matrix = torch.matmul(z_tilde, z.T) / self.tau
+                    if self.repa_type_masking:
+                        diff_type_mask = (batch.atom_types.unsqueeze(0) != batch.atom_types.unsqueeze(1)) # [N, N]
+                        eye_mask = torch.eye(batch.num_nodes, device=self.device).bool()
+                        valid_mask = diff_type_mask | eye_mask
+                        sim_matrix = sim_matrix.masked_fill(~valid_mask, -9e15)
                     # Generate labels
                     labels = torch.arange(batch.num_nodes, device=self.device)
                     # Compute loss

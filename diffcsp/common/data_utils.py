@@ -1321,6 +1321,8 @@ def process_one(row, niggli, primitive, graph_method, prop_list, use_space_group
         check_frac_coords = np.array(ast.literal_eval(row["check_dpa3_frac_coords"])).reshape(__natoms, 3)
         check_rep_atypes = np.array(ast.literal_eval(row["check_dpa3_atypes"]))
         dpa3_rep_list = np.array(ast.literal_eval(row["dpa3_rep_list"])).reshape(16, __natoms, 128)
+        dpa3_rep_list = dpa3_rep_list.transpose(1, 0, 2) # natoms, 16, 128
+        assert np.allclose(dpa3_rep, dpa3_rep_list[:, -1, :], rtol=1e-3, atol=1e-5)
         check_coords_list = np.array(ast.literal_eval(row["check_dpa3_coords_list"])).reshape(__natoms, 3)
         check_frac_coords_list = np.array(ast.literal_eval(row["check_dpa3_frac_coords_list"])).reshape(__natoms, 3)
         check_rep_atypes_list = np.array(ast.literal_eval(row["check_dpa3_atypes_list"]))
