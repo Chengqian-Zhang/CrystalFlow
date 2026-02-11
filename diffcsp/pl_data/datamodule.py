@@ -124,7 +124,7 @@ class CrystDataModule(pl.LightningDataModule):
             num_workers=self.num_workers.train,
             worker_init_fn=worker_init_fn,
             pin_memory=True,
-            persistent_workers=True,
+            #persistent_workers=True,
         )
 
     def val_dataloader(self) -> Sequence[DataLoader]:
@@ -136,7 +136,7 @@ class CrystDataModule(pl.LightningDataModule):
                 num_workers=self.num_workers.val,
                 worker_init_fn=worker_init_fn,
                 pin_memory=True,
-                persistent_workers=True,
+                #persistent_workers=True,
             )
             for dataset in self.val_datasets
         ]
@@ -150,7 +150,7 @@ class CrystDataModule(pl.LightningDataModule):
                 num_workers=self.num_workers.test,
                 worker_init_fn=worker_init_fn,
                 pin_memory=True,
-                persistent_workers=True,
+                #persistent_workers=True,
             )
             for dataset in self.test_datasets
         ]

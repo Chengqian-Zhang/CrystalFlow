@@ -30,7 +30,7 @@ class ResidualLayer(nn.Module):
         )
 
     def forward(self, x):
-        # Core: (x) + x
+        # Core: f(x) + x
         return self.net(x) + x
 
 def build_mlp(hidden_size, projector_dim, z_dim, linear_trans, residual_layers=-1):

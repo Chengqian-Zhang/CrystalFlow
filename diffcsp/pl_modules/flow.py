@@ -114,6 +114,7 @@ class CSPFlow(BaseModule):
         if self.align_layers is not None:
             self.multi_align = True
             assert len(self.align_layers) > 1
+            hydra.utils.log.info(f"Using multi_align: {self.align_layers}.")
         self.register_buffer('align_weights', torch.tensor(self.hparams.get("align_weights", [1.0])))
         if len(self.align_weights) > 1:
             assert len(self.align_weights) == len(self.align_layers)
@@ -380,6 +381,7 @@ class CSPFlow(BaseModule):
             proj_loss = 0.0
             assert self.repa_models is not None
             if self.multi_align:
+                raise RuntimeError("Do not support multi_align at this moment.")
                 assert len(self.repa_models) * len(self.align_layers) == len(zs_tilde)
                 assert torch.allclose(batch.dpa3_all_reps[:,-1,:], batch.dpa3_rep, rtol=1e-3, atol=1e-5)
                 zs = []
@@ -387,8 +389,17 @@ class CSPFlow(BaseModule):
                     zs.append(batch.dpa3_all_reps[:, __layer - 1, :])
             else:
                 assert len(self.repa_models) == len(zs_tilde)
-                zs = [batch.dpa3_rep] # hack at this moment
+                assert len(self.repa_models) == 1
+                if self.repa_models[0] == "dpa3":
+                    zs = [batch.dpa3_rep]
+                elif self.repa_models[0] == "mace_mp_0":
+                    zs = [batch.mace_mp_0_rep]
+                elif self.repa_models[0] == "mace_mpa_0":
+                    zs = [batch.mace_mpa_0_rep]
+                else:
+                    raise RuntimeError(f"{self.repa_models[0]} is not supported.")                    
 
+            assert len(zs) == len(zs_tilde)
             if self.sim_method == "ntxent":
                 for __idx, (z, z_tilde) in enumerate(zip(zs, zs_tilde)):
                     # Normalize representations for cosine similarity calculation

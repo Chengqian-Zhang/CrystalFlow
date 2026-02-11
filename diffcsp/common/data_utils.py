@@ -1295,6 +1295,8 @@ def parse_prop(item):
     else:
         raise ValueError(f"Parse prop failed: {item}")
 
+def normalize_coords(coords):
+    return np.mod(coords + 1e-9, 1.0)
 
 def process_one(row, niggli, primitive, graph_method, prop_list, use_space_group = False, tol=0.01):
     crystal_str = row['cif']
@@ -1314,31 +1316,56 @@ def process_one(row, niggli, primitive, graph_method, prop_list, use_space_group
         'graph_arrays': graph_arrays
     })
     result_dict.update(properties)
-    if "dpa3_rep" in row.keys():
-        __natoms = len(graph_arrays[0])
+    __natoms = len(graph_arrays[0])
+    if "dpa3_rep" in row.keys(): # DPA-3.1-3M
         dpa3_rep = np.array(ast.literal_eval(row["dpa3_rep"])).reshape(__natoms, 128)
         check_coords = np.array(ast.literal_eval(row["check_dpa3_coords"])).reshape(__natoms, 3)
         check_frac_coords = np.array(ast.literal_eval(row["check_dpa3_frac_coords"])).reshape(__natoms, 3)
         check_rep_atypes = np.array(ast.literal_eval(row["check_dpa3_atypes"]))
+        assert np.allclose(check_rep_atypes, graph_arrays[1]-1)
+        assert np.allclose(check_coords, crystal.cart_coords)
+        assert np.allclose(check_frac_coords, crystal.frac_coords)
+        result_dict.update({
+            "dpa3_rep": dpa3_rep,
+            "check_atype": check_rep_atypes,
+            "check_frac_coords": check_frac_coords,
+        })
+    if "dpa3_rep_list" in row.keys(): # All layers of DPA-3.1-3M
         dpa3_rep_list = np.array(ast.literal_eval(row["dpa3_rep_list"])).reshape(16, __natoms, 128)
         dpa3_rep_list = dpa3_rep_list.transpose(1, 0, 2) # natoms, 16, 128
         assert np.allclose(dpa3_rep, dpa3_rep_list[:, -1, :], rtol=1e-3, atol=1e-5)
         check_coords_list = np.array(ast.literal_eval(row["check_dpa3_coords_list"])).reshape(__natoms, 3)
         check_frac_coords_list = np.array(ast.literal_eval(row["check_dpa3_frac_coords_list"])).reshape(__natoms, 3)
         check_rep_atypes_list = np.array(ast.literal_eval(row["check_dpa3_atypes_list"]))
-        assert np.allclose(check_rep_atypes, graph_arrays[1]-1)
-        assert np.allclose(check_coords, crystal.cart_coords)
-        assert np.allclose(check_frac_coords, crystal.frac_coords)
         assert np.allclose(check_rep_atypes_list, graph_arrays[1]-1)
         assert np.allclose(check_coords_list, crystal.cart_coords)
         assert np.allclose(check_frac_coords_list, crystal.frac_coords)
         result_dict.update({
-            "dpa3_rep": dpa3_rep,
-            "check_atype": check_rep_atypes,
-            "check_frac_coords": check_frac_coords,
             "dpa3_rep_list": dpa3_rep_list,
             "check_atype_list": check_rep_atypes_list,
             "check_frac_coords_list": check_frac_coords_list,
+        })
+    if "mace-mpa-0-medium_rep" in row.keys(): # MACE-MPA-0
+        mace_mpa_0_rep = np.array(ast.literal_eval(row["mace-mpa-0-medium_rep"])).reshape(__natoms, 256)
+        check_coords = np.array(ast.literal_eval(row["check_mace-mpa-0-medium_coords"])).reshape(__natoms, 3)
+        check_frac_coords = np.array(ast.literal_eval(row["check_mace-mpa-0-medium_frac_coords"])).reshape(__natoms, 3)
+        check_rep_atypes = np.array(ast.literal_eval(row["check_mace-mpa-0-medium_atypes"]))
+        assert np.allclose(check_rep_atypes, graph_arrays[1])
+        assert np.allclose(check_coords, crystal.cart_coords)
+        assert np.allclose(normalize_coords(check_frac_coords), normalize_coords(crystal.frac_coords))
+        result_dict.update({
+            "mace_mpa_0_rep": mace_mpa_0_rep,
+        })
+    if "2023-12-03-mace-128-L1_epoch-199_rep" in row.keys(): # MACE-MP-0
+        mace_mp_0_rep = np.array(ast.literal_eval(row["2023-12-03-mace-128-L1_epoch-199_rep"])).reshape(__natoms, 256)
+        check_coords = np.array(ast.literal_eval(row["check_2023-12-03-mace-128-L1_epoch-199_coords"])).reshape(__natoms, 3)
+        check_frac_coords = np.array(ast.literal_eval(row["check_2023-12-03-mace-128-L1_epoch-199_frac_coords"])).reshape(__natoms, 3)
+        check_rep_atypes = np.array(ast.literal_eval(row["check_2023-12-03-mace-128-L1_epoch-199_atypes"]))
+        assert np.allclose(check_rep_atypes, graph_arrays[1])
+        assert np.allclose(check_coords, crystal.cart_coords)
+        assert np.allclose(normalize_coords(check_frac_coords), normalize_coords(crystal.frac_coords))
+        result_dict.update({
+            "mace_mp_0_rep": mace_mp_0_rep,
         })
     return result_dict
 
